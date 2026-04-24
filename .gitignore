@@ -19,3 +19,8 @@ Thumbs.db
 # Logs
 *.log
 system.out.logs
+logs/
+reports/
+resumes/
+drivers/
+backend/data/

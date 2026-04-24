@@ -1,111 +1,110 @@
-<main class="page">
-  <div *ngIf="announcement" class="announcement-bar">
-    <div class="announcement-text">{{ announcement }}</div>
-  </div>
-
-  <section *ngIf="!isLoggedIn" class="login-panel" aria-label="Login">
-    <h1>Internal Chatbot</h1>
-    <p>Login with your td.com account.</p>
-
-    <form class="login-form" (ngSubmit)="login()">
-      <input
-        type="email"
-        name="loginEmail"
-        [(ngModel)]="loginEmail"
-        placeholder="email@td.com"
-        autocomplete="email"
-        [disabled]="isLoggingIn"
-      >
-      <input
-        type="password"
-        name="loginPassword"
-        [(ngModel)]="loginPassword"
-        placeholder="Password"
-        autocomplete="current-password"
-        [disabled]="isLoggingIn"
-      >
-      <button type="submit" [disabled]="isLoggingIn || !loginEmail || !loginPassword">
-        {{ isLoggingIn ? 'Logging in...' : 'Login' }}
-      </button>
-      <button *ngIf="isLoggingIn" type="button" class="secondary-button" (click)="cancelLogin()">
-        Cancel
-      </button>
-    </form>
-
-    <p *ngIf="loginError" class="error-message">{{ loginError }}</p>
-    <p class="demo-help">Demo admin: admin@td.com / admin123</p>
-    <p class="demo-help">Demo user: user@td.com / user123</p>
-  </section>
-
-  <section *ngIf="isLoggedIn" class="chat-window" aria-label="Internal chatbot">
-    <header class="chat-header">
-      <div>
-        <h1>Internal Chatbot</h1>
-        <p>{{ email }} - {{ role }}</p>
-      </div>
-      <button type="button" class="logout-button" (click)="logout()">Logout</button>
-    </header>
-
-    <section *ngIf="isAdmin" class="admin-panel" aria-label="Admin controls">
-      <form class="admin-form" (ngSubmit)="grantAccess()">
-        <input
-          type="email"
-          name="accessEmail"
-          [(ngModel)]="accessEmail"
-          placeholder="Grant access: user@td.com"
-          [disabled]="isSavingAdminAction"
-        >
-        <input
-          type="password"
-          name="accessPassword"
-          [(ngModel)]="accessPassword"
-          placeholder="Temporary password"
-          [disabled]="isSavingAdminAction"
-        >
-        <button type="submit" [disabled]="isSavingAdminAction || !accessEmail || !accessPassword">Grant</button>
-      </form>
-
-      <form class="admin-form" (ngSubmit)="addAnnouncement()">
-        <input
-          type="text"
-          name="announcement"
-          [(ngModel)]="announcementInput"
-          placeholder="Add announcement"
-          [disabled]="isSavingAdminAction"
-        >
-        <button type="submit" [disabled]="isSavingAdminAction || !announcementInput.trim()">Announce</button>
-      </form>
-
-      <p *ngIf="adminMessage" class="admin-message">{{ adminMessage }}</p>
-    </section>
-
-    <div class="messages">
-      <div
-        *ngFor="let message of messages"
-        class="message-row"
-        [class.user-row]="message.sender === 'user'"
-        [class.bot-row]="message.sender === 'bot'"
-      >
-        <div class="message-bubble">
-          {{ message.text }}
-        </div>
-      </div>
-
-      <div *ngIf="isLoading" class="message-row bot-row">
-        <div class="message-bubble loading">Typing...</div>
-      </div>
+<div class="workspace-shell">
+  <aside class="sidebar">
+    <div class="brand-block">
+      <p class="eyebrow">AI Job Apply Assistant</p>
+      <h1>Auto-apply ops for Naukri and external portals</h1>
+      <p class="brand-copy">
+        Production-style dashboard for profile setup, AI-assisted form filling, question handling, daily reporting, and live debug visibility.
+      </p>
     </div>
 
-    <form class="chat-form" (ngSubmit)="sendMessage()">
-      <input
-        type="text"
-        name="message"
-        [(ngModel)]="userInput"
-        placeholder="Ask: How to create RITM?"
-        autocomplete="off"
-        [disabled]="isLoading"
-      >
-      <button type="submit" [disabled]="isLoading || !userInput.trim()">Send</button>
-    </form>
-  </section>
-</main>
+    <nav class="nav-stack" *ngIf="isAuthenticated">
+      <button
+        *ngFor="let item of navItems"
+        class="nav-item"
+        [class.active]="currentView === item.view"
+        type="button"
+        (click)="currentView = item.view">
+        {{ item.label }}
+      </button>
+    </nav>
+
+    <div class="sidebar-card" *ngIf="activeStatus as status">
+      <span>Run Status</span>
+      <strong>{{ status.status.replaceAll('_', ' ') }}</strong>
+      <p>{{ status.summary }}</p>
+    </div>
+  </aside>
+
+  <main class="main-panel">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Full-Stack Job Automation</p>
+        <h2>{{ isAuthenticated ? 'Automation workspace' : 'Secure login' }}</h2>
+      </div>
+      <div class="topbar-actions" *ngIf="isAuthenticated">
+        <button class="mini-btn" type="button" (click)="refreshAll()">Refresh All</button>
+        <button class="mini-btn accent" type="button" (click)="logout()">Logout</button>
+      </div>
+    </header>
+
+    <div class="flash" *ngIf="flashMessage" [attr.data-type]="flashType">
+      {{ flashMessage }}
+    </div>
+
+    <section *ngIf="!isAuthenticated" class="login-shell">
+      <div class="login-card">
+        <p class="eyebrow">Backend Auth</p>
+        <h3>Sign in to begin managing the apply bot</h3>
+        <p class="login-copy">
+          Demo admin login is prefilled from the backend seed data. Replace it with a real user account after registration if needed.
+        </p>
+        <label>
+          <span>Email</span>
+          <input [(ngModel)]="loginEmail" name="loginEmail" type="email" />
+        </label>
+        <label>
+          <span>Password</span>
+          <input [(ngModel)]="loginPassword" name="loginPassword" type="password" />
+        </label>
+        <button class="login-btn" type="button" (click)="login()" [disabled]="authBusy">
+          {{ authBusy ? 'Signing in...' : 'Login' }}
+        </button>
+      </div>
+    </section>
+
+    <ng-container *ngIf="isAuthenticated">
+      <app-dashboard-page
+        *ngIf="currentView === 'dashboard'"
+        [summary]="summary"
+        [busy]="dashboardBusy"
+        (startApply)="startAutomation()"
+        (stopApply)="stopAutomation()"
+        (refresh)="loadDashboard()"
+        (navigate)="currentView = $event">
+      </app-dashboard-page>
+
+      <app-profile-page
+        *ngIf="currentView === 'profile'"
+        [profile]="profile"
+        [busy]="profileBusy"
+        (saveProfile)="saveProfile($event)"
+        (resumeUpload)="uploadResume($event)">
+      </app-profile-page>
+
+      <app-questions-page
+        *ngIf="currentView === 'questions'"
+        [questions]="questions"
+        [busy]="questionBusy"
+        [suggestingQuestionId]="questionSuggestingId"
+        [suggestedAnswers]="suggestedAnswers"
+        (suggest)="suggestQuestionAnswer($event)"
+        (answer)="answerQuestion($event)">
+      </app-questions-page>
+
+      <app-reports-page
+        *ngIf="currentView === 'reports'"
+        [report]="report"
+        [busy]="reportBusy"
+        (loadReport)="loadReport($event)">
+      </app-reports-page>
+
+      <app-logs-page
+        *ngIf="currentView === 'logs'"
+        [logs]="logs"
+        [busy]="logsBusy"
+        (refresh)="loadLogs()">
+      </app-logs-page>
+    </ng-container>
+  </main>
+</div>

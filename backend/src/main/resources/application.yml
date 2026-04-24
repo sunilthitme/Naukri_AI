@@ -1,0 +1,92 @@
+spring:
+  application:
+    name: ai-job-apply-assistant
+  datasource:
+    url: ${DB_URL:jdbc:h2:file:./data/aijobapply;MODE=MySQL;DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE}
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:password}
+    driver-class-name: ${DB_DRIVER:org.h2.Driver}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 15MB
+  task:
+    scheduling:
+      pool:
+        size: 4
+    execution:
+      pool:
+        core-size: 4
+        max-size: 8
+        queue-capacity: 200
+  sql:
+    init:
+      mode: never
+  jackson:
+    default-property-inclusion: non_null
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_AUTH:false}
+          starttls:
+            enable: ${MAIL_STARTTLS:false}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+app:
+  cors-allowed-origins:
+    - ${FRONTEND_URL:http://localhost:4200}
+  security:
+    jwt-secret: ${JWT_SECRET:change-me-change-me-change-me-1234567890}
+    jwt-expiration-minutes: ${JWT_EXPIRATION_MINUTES:720}
+    credential-secret: ${CREDENTIAL_SECRET:0123456789ABCDEF0123456789ABCDEF}
+  ai:
+    ollama-base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+    model: ${OLLAMA_MODEL:llama3.1}
+    timeout-seconds: ${OLLAMA_TIMEOUT_SECONDS:120}
+  scheduler:
+    enabled: ${SCHEDULER_ENABLED:true}
+    cron: ${JOB_APPLY_CRON:0 0 9 * * MON-FRI}
+  storage:
+    resumes-dir: ${RESUMES_DIR:../resumes}
+    reports-dir: ${REPORTS_DIR:../reports}
+    logs-dir: ${LOGS_DIR:../logs}
+    drivers-dir: ${DRIVERS_DIR:../drivers}
+  automation:
+    minimum-relevance-score: ${MIN_RELEVANCE_SCORE:70}
+    human-delay-min-ms: ${HUMAN_DELAY_MIN_MS:900}
+    human-delay-max-ms: ${HUMAN_DELAY_MAX_MS:2200}
+    headless: ${PLAYWRIGHT_HEADLESS:false}
+    max-jobs-per-run: ${MAX_JOBS_PER_RUN:30}
+    retry-count: ${AUTOMATION_RETRY_COUNT:2}
+  notifications:
+    email-enabled: ${EMAIL_REPORT_ENABLED:false}
+    telegram-enabled: ${TELEGRAM_ENABLED:false}
+    telegram-bot-token: ${TELEGRAM_BOT_TOKEN:}
+    telegram-chat-id: ${TELEGRAM_CHAT_ID:}
+    whatsapp-enabled: ${WHATSAPP_ENABLED:false}
+    whatsapp-webhook-url: ${WHATSAPP_WEBHOOK_URL:}
+
+logging:
+  level:
+    root: INFO
+    com.aijobapplyassistant: DEBUG

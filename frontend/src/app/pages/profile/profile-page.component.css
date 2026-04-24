@@ -1,0 +1,124 @@
+.page-shell {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.panel {
+  background: rgba(255, 255, 255, 0.88);
+  border-radius: 28px;
+  padding: 1.4rem;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.06);
+}
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #9c5a00;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
+label {
+  display: grid;
+  gap: 0.45rem;
+  font-weight: 600;
+  color: #344256;
+}
+
+input,
+textarea {
+  border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  padding: 0.85rem 1rem;
+  background: #fff;
+  font: inherit;
+}
+
+textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.resume-card,
+.card-head,
+.toggle-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+}
+
+.resume-card {
+  margin-top: 1.2rem;
+  padding: 1rem;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(245, 250, 237, 0.9), rgba(255, 246, 230, 0.9));
+}
+
+.upload-btn,
+.btn,
+.icon-btn {
+  cursor: pointer;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.8rem 1.15rem;
+  font-weight: 700;
+}
+
+.upload-btn input {
+  display: none;
+}
+
+.upload-btn,
+.btn-primary {
+  background: #0c7c66;
+  color: #fff;
+}
+
+.btn-ghost,
+.icon-btn {
+  background: rgba(12, 124, 102, 0.08);
+  color: #0f3f37;
+}
+
+.preference-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.preference-card {
+  padding: 1rem;
+  border-radius: 22px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(250, 252, 255, 0.9);
+}
+
+.toggle-row {
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+@media (max-width: 860px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,88 @@
+<section class="page-shell">
+  <div class="hero-card">
+    <div>
+      <p class="eyebrow">Automation Command Center</p>
+      <h2>Keep your Naukri and career-portal pipeline moving</h2>
+      <p class="hero-copy">
+        Start or stop the bot, monitor job relevance decisions, and watch the question queue whenever a portal asks for something the AI cannot safely infer.
+      </p>
+    </div>
+
+    <div class="hero-actions">
+      <app-status-chip [status]="summary?.latestRun?.status ?? 'IDLE'"></app-status-chip>
+      <div class="action-row">
+        <button class="btn btn-primary" type="button" (click)="startApply.emit()" [disabled]="busy">Apply Jobs</button>
+        <button class="btn btn-ghost" type="button" (click)="stopApply.emit()" [disabled]="busy">Stop</button>
+        <button class="btn btn-ghost" type="button" (click)="refresh.emit()">Refresh</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="progress-card" *ngIf="summary?.latestRun as run">
+    <div class="progress-header">
+      <div>
+        <h3>Run Progress</h3>
+        <p>{{ run.summary || 'Waiting for the next action.' }}</p>
+      </div>
+      <strong>{{ progressWidth() }}%</strong>
+    </div>
+    <div class="progress-track">
+      <span class="progress-fill" [style.width.%]="progressWidth()"></span>
+    </div>
+  </div>
+
+  <div class="metrics-grid" *ngIf="summary">
+    <article class="metric-card">
+      <span>Applied Today</span>
+      <strong>{{ summary.totalAppliedToday }}</strong>
+    </article>
+    <article class="metric-card">
+      <span>Skipped Today</span>
+      <strong>{{ summary.totalSkippedToday }}</strong>
+    </article>
+    <article class="metric-card">
+      <span>Failed Today</span>
+      <strong>{{ summary.totalFailedToday }}</strong>
+    </article>
+    <article class="metric-card clickable" (click)="navigate.emit('questions')">
+      <span>Open Questions</span>
+      <strong>{{ summary.openQuestions }}</strong>
+    </article>
+  </div>
+
+  <div class="table-card" *ngIf="summary">
+    <div class="section-head">
+      <h3>Recent Applications</h3>
+      <button class="link-btn" type="button" (click)="navigate.emit('reports')">Open Reports</button>
+    </div>
+
+    <div class="table-wrap" *ngIf="summary.recentApplications.length; else noApplications">
+      <table>
+        <thead>
+          <tr>
+            <th>Company</th>
+            <th>Role</th>
+            <th>Portal</th>
+            <th>Status</th>
+            <th>Score</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let item of summary.recentApplications">
+            <td>{{ item.company }}</td>
+            <td>{{ item.title }}</td>
+            <td>{{ item.portal }}</td>
+            <td><app-status-chip [status]="item.status"></app-status-chip></td>
+            <td>{{ item.relevanceScore }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <ng-template #noApplications>
+    <div class="empty-state">
+      <p>No applications recorded yet. Save your profile and start the first run.</p>
+    </div>
+  </ng-template>
+</section>

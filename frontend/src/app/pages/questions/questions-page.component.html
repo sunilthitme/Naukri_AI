@@ -1,0 +1,32 @@
+<section class="page-shell">
+  <div class="panel">
+    <p class="eyebrow">Human In The Loop</p>
+    <h2>Answer the fields the AI should not guess</h2>
+    <p class="intro">
+      When a portal asks for a preference, compliance number, relocation choice, or anything else outside the safe profile context, the bot pauses here and waits for your answer.
+    </p>
+
+    <div class="question-list" *ngIf="questions.length; else noQuestions">
+      <article class="question-card" *ngFor="let item of questions">
+        <div class="question-meta">
+          <span>{{ item.sourcePortal || 'Portal question' }}</span>
+          <strong>{{ item.fieldLabel || 'Additional information' }}</strong>
+        </div>
+        <p class="question-text">{{ item.question }}</p>
+        <textarea [(ngModel)]="draftAnswers[item.id]" [name]="'answer' + item.id" placeholder="Type your answer here"></textarea>
+        <div class="action-row">
+          <button class="ghost-btn" type="button" (click)="askAi(item.id)" [disabled]="busy || suggestingQuestionId === item.id">
+            {{ suggestingQuestionId === item.id ? 'Generating...' : 'AI Suggest' }}
+          </button>
+          <button class="btn" type="button" (click)="submit(item)" [disabled]="busy">Send Answer</button>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<ng-template #noQuestions>
+  <div class="empty-state">
+    <p>No open questions right now.</p>
+  </div>
+</ng-template>

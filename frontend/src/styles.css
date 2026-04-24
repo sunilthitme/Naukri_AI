@@ -1,7 +1,29 @@
 * {
   box-sizing: border-box;
 }
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
 
+body {
+  font-family: 'Segoe UI', 'Trebuchet MS', sans-serif;
+  background:
+    radial-gradient(circle at top right, rgba(255, 190, 89, 0.25), transparent 30%),
+    radial-gradient(circle at bottom left, rgba(12, 124, 102, 0.18), transparent 26%),
+    linear-gradient(180deg, #f7f3ea 0%, #eef3f7 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
 body {
   margin: 0;
   font-family: Arial, Helvetica, sans-serif;

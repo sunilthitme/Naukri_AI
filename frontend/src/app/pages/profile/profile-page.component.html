@@ -1,0 +1,133 @@
+<section class="page-shell">
+  <div class="panel">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">Candidate Setup</p>
+        <h2>Keep profile and credentials ready for one-click automation</h2>
+      </div>
+      <button class="btn btn-primary" type="button" (click)="submit()" [disabled]="busy">Save Profile</button>
+    </div>
+
+    <div class="form-grid">
+      <label>
+        <span>Full Name</span>
+        <input [(ngModel)]="draft.fullName" name="fullName" />
+      </label>
+      <label>
+        <span>Email</span>
+        <input [(ngModel)]="draft.email" name="email" type="email" />
+      </label>
+      <label>
+        <span>Phone Number</span>
+        <input [(ngModel)]="draft.phoneNumber" name="phoneNumber" />
+      </label>
+      <label>
+        <span>Total Experience</span>
+        <input [(ngModel)]="draft.totalExperience" name="totalExperience" type="number" />
+      </label>
+      <label>
+        <span>Current Company</span>
+        <input [(ngModel)]="draft.currentCompany" name="currentCompany" />
+      </label>
+      <label>
+        <span>Current Salary</span>
+        <input [(ngModel)]="draft.currentSalary" name="currentSalary" />
+      </label>
+      <label>
+        <span>Expected Salary</span>
+        <input [(ngModel)]="draft.expectedSalary" name="expectedSalary" />
+      </label>
+      <label>
+        <span>Notice Period</span>
+        <input [(ngModel)]="draft.noticePeriod" name="noticePeriod" />
+      </label>
+      <label class="full-width">
+        <span>Preferred Location</span>
+        <input [(ngModel)]="draft.locationPreference" name="locationPreference" />
+      </label>
+      <label class="full-width">
+        <span>Skills</span>
+        <textarea [(ngModel)]="draft.skills" name="skills"></textarea>
+      </label>
+      <label class="full-width">
+        <span>Preferred Keywords / JD Notes</span>
+        <textarea [(ngModel)]="draft.preferredKeywords" name="preferredKeywords"></textarea>
+      </label>
+      <label>
+        <span>Naukri Username / Email</span>
+        <input [(ngModel)]="draft.naukriUsername" name="naukriUsername" />
+      </label>
+      <label>
+        <span>Naukri Password</span>
+        <input [(ngModel)]="draft.naukriPassword" name="naukriPassword" type="password" placeholder="Leave blank to keep existing password" />
+      </label>
+    </div>
+
+    <div class="resume-card">
+      <div>
+        <h3>Resume</h3>
+        <p>{{ draft.resumeFileName || 'No resume uploaded yet.' }}</p>
+      </div>
+      <label class="upload-btn">
+        <input type="file" accept=".pdf,.doc,.docx" (change)="handleResumeSelection($event)" />
+        Upload Resume
+      </label>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">Job Preferences</p>
+        <h2>Define the search combinations the bot should run</h2>
+      </div>
+      <button class="btn btn-ghost" type="button" (click)="addPreference()">Add Preference</button>
+    </div>
+
+    <div class="preference-list">
+      <article class="preference-card" *ngFor="let preference of draft.preferences; let i = index; trackBy: trackByIndex">
+        <div class="card-head">
+          <h3>Search {{ i + 1 }}</h3>
+          <button class="icon-btn" type="button" (click)="removePreference(i)" *ngIf="draft.preferences.length > 1">Remove</button>
+        </div>
+        <div class="form-grid">
+          <label>
+            <span>Job Title</span>
+            <input [(ngModel)]="preference.title" [name]="'title' + i" />
+          </label>
+          <label>
+            <span>Skills</span>
+            <input [(ngModel)]="preference.skills" [name]="'skills' + i" />
+          </label>
+          <label>
+            <span>Experience</span>
+            <input [(ngModel)]="preference.experience" [name]="'experience' + i" type="number" />
+          </label>
+          <label>
+            <span>Salary Range</span>
+            <input [(ngModel)]="preference.salaryRange" [name]="'salaryRange' + i" />
+          </label>
+          <label>
+            <span>Preferred Location</span>
+            <input [(ngModel)]="preference.preferredLocation" [name]="'preferredLocation' + i" />
+          </label>
+          <label>
+            <span>Minimum AI Score</span>
+            <input [(ngModel)]="preference.minimumScore" [name]="'minimumScore' + i" type="number" min="1" max="100" />
+          </label>
+          <label class="full-width">
+            <span>Keywords</span>
+            <textarea [(ngModel)]="preference.keywords" [name]="'keywords' + i"></textarea>
+          </label>
+        </div>
+
+        <div class="toggle-row">
+          <label><input type="checkbox" [(ngModel)]="preference.postedTodayOnly" [name]="'today' + i" /> Posted today</label>
+          <label><input type="checkbox" [(ngModel)]="preference.easyApplyFirst" [name]="'easy' + i" /> Easy apply first</label>
+          <label><input type="checkbox" [(ngModel)]="preference.relevantJobsOnly" [name]="'relevant' + i" /> Relevant only</label>
+          <label><input type="checkbox" [(ngModel)]="preference.active" [name]="'active' + i" /> Active</label>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,46 @@
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.status-chip[data-status='RUNNING'] {
+  background: rgba(31, 171, 137, 0.18);
+  color: #0e5c4e;
+  border-color: rgba(31, 171, 137, 0.28);
+}
+
+.status-chip[data-status='COMPLETED'],
+.status-chip[data-status='APPLIED'] {
+  background: rgba(66, 158, 245, 0.18);
+  color: #0a4979;
+  border-color: rgba(66, 158, 245, 0.25);
+}
+
+.status-chip[data-status='WAITING_FOR_USER'],
+.status-chip[data-status='QUESTION_PENDING'] {
+  background: rgba(255, 176, 59, 0.18);
+  color: #834f00;
+  border-color: rgba(255, 176, 59, 0.28);
+}
+
+.status-chip[data-status='FAILED'],
+.status-chip[data-status='CAPTCHA_WAITING'] {
+  background: rgba(222, 86, 60, 0.14);
+  color: #8d1f0f;
+  border-color: rgba(222, 86, 60, 0.24);
+}
+
+.status-chip[data-status='STOPPED'],
+.status-chip[data-status='SKIPPED'],
+.status-chip[data-status='IDLE'] {
+  background: rgba(95, 108, 128, 0.14);
+  color: #364152;
+  border-color: rgba(95, 108, 128, 0.18);
+}

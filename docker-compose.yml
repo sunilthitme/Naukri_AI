@@ -1,0 +1,61 @@
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: ai-job-apply-mysql
+    environment:
+      MYSQL_DATABASE: jobapplydb
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: jobapply
+      MYSQL_PASSWORD: jobapply
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai-job-apply-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+
+  backend:
+    build:
+      context: ./backend
+    container_name: ai-job-apply-backend
+    depends_on:
+      - mysql
+      - ollama
+    environment:
+      SERVER_PORT: 8080
+      DB_URL: jdbc:mysql://mysql:3306/jobapplydb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DB_USERNAME: jobapply
+      DB_PASSWORD: jobapply
+      DB_DRIVER: com.mysql.cj.jdbc.Driver
+      FRONTEND_URL: http://localhost:4200
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: llama3.1
+      PLAYWRIGHT_HEADLESS: "true"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./logs:/logs
+      - ./reports:/reports
+      - ./resumes:/resumes
+      - ./drivers:/drivers
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: ai-job-apply-frontend
+    depends_on:
+      - backend
+    ports:
+      - "4200:80"
+
+volumes:
+  mysql-data:
+  ollama-data:
