@@ -57,6 +57,13 @@ $env:SPRING_DATASOURCE_PASSWORD="change-me"
 mvn -pl backend -am spring-boot:run
 ```
 
+You can also run from inside the backend folder:
+
+```powershell
+cd backend
+mvn clean spring-boot:run
+```
+
 Local smoke profile without PostgreSQL:
 
 ```powershell
