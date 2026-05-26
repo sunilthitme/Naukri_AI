@@ -1,0 +1,23 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:naukri_bot;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  flyway:
+    enabled: false
+
+app:
+  security:
+    jwt-secret: 01234567890123456789012345678901
+    encryption-key: 01234567890123456789012345678901
+    token-expiration-minutes: 60
+  bot:
+    storage-dir: target/test-storage
+    headless: true
+    dry-run: true
+    max-retries: 0
+  llm:
+    api-key:

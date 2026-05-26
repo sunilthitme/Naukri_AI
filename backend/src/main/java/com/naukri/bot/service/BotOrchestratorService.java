@@ -1,0 +1,213 @@
+package com.naukri.bot.service;
+
+import com.naukri.bot.automation.AutomationControl;
+import com.naukri.bot.automation.NaukriAutomationClient;
+import com.naukri.bot.automation.model.AutomationJobFilter;
+import com.naukri.bot.automation.model.AutomationRunRequest;
+import com.naukri.bot.automation.model.AutomationRunResult;
+import com.naukri.bot.automation.model.JobApplicationResult;
+import com.naukri.bot.automation.model.ProxySettings;
+import com.naukri.bot.config.AppProperties;
+import com.naukri.bot.domain.AppliedJob;
+import com.naukri.bot.domain.ApplyStatus;
+import com.naukri.bot.domain.BotRunStatus;
+import com.naukri.bot.domain.ExternalRedirectJob;
+import com.naukri.bot.domain.JobFilter;
+import com.naukri.bot.domain.NaukriCredentials;
+import com.naukri.bot.domain.User;
+import com.naukri.bot.dto.BotDtos.BotCommandResponse;
+import com.naukri.bot.exception.AppException;
+import com.naukri.bot.repository.AppliedJobRepository;
+import com.naukri.bot.repository.ExternalRedirectJobRepository;
+import com.naukri.bot.repository.JobFilterRepository;
+import com.naukri.bot.repository.NaukriCredentialsRepository;
+import com.naukri.bot.repository.UserRepository;
+import com.naukri.bot.util.ListTextMapper;
+import lombok.RequiredArgsConstructor;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.nio.file.Path;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class BotOrchestratorService {
+    private final NaukriAutomationClient automationClient;
+    private final TaskExecutor botTaskExecutor;
+    private final AppProperties properties;
+    private final NaukriCredentialsRepository credentialsRepository;
+    private final UserRepository userRepository;
+    private final JobFilterRepository jobFilterRepository;
+    private final AppliedJobRepository appliedJobRepository;
+    private final ExternalRedirectJobRepository externalRedirectJobRepository;
+    private final EncryptionService encryptionService;
+    private final AIAnswerService aiAnswerService;
+    private final CsvService csvService;
+    private final SmartMatchService smartMatchService;
+    private final ResumeSelectionService resumeSelectionService;
+    private final BotStatusService botStatusService;
+    private final BotLogService botLogService;
+    private final BotRuntimeState runtimeState;
+    private final NotificationService notificationService;
+
+    public BotCommandResponse start(User user) {
+        botStatusService.set(user, BotRunStatus.RUNNING, true, false, false, "Automation started");
+        botLogService.info(user, "Automation queued");
+        runtimeState.start(user.getId());
+        botTaskExecutor.execute(() -> runAutomation(user.getId()));
+        return new BotCommandResponse("Bot started", BotRunStatus.RUNNING);
+    }
+
+    public BotCommandResponse stop(User user) {
+        runtimeState.stop(user.getId());
+        botStatusService.set(user, BotRunStatus.STOPPED, false, false, false, "Stop requested");
+        botLogService.warn(user, "Stop requested");
+        return new BotCommandResponse("Stop requested", BotRunStatus.STOPPED);
+    }
+
+    public BotCommandResponse pause(User user) {
+        runtimeState.pause(user.getId());
+        botStatusService.set(user, BotRunStatus.PAUSED, true, true, false, "Paused");
+        botLogService.warn(user, "Automation paused");
+        return new BotCommandResponse("Bot paused", BotRunStatus.PAUSED);
+    }
+
+    public BotCommandResponse resume(User user) {
+        runtimeState.resume(user.getId());
+        botStatusService.set(user, BotRunStatus.RUNNING, true, false, false, "Resumed");
+        botLogService.info(user, "Automation resumed");
+        return new BotCommandResponse("Bot resumed", BotRunStatus.RUNNING);
+    }
+
+    public BotCommandResponse testLogin(User user) {
+        boolean success = automationClient.testLogin(request(user, true));
+        botLogService.info(user, success ? "Naukri login test passed" : "Naukri login test failed");
+        return new BotCommandResponse(success ? "Login test passed" : "Login test failed", success ? BotRunStatus.IDLE : BotRunStatus.FAILED);
+    }
+
+    public BotCommandResponse testApply(User user) {
+        AutomationRunRequest request = request(user, true);
+        AutomationRunResult result = automationClient.run(request, question -> aiAnswerService.answerFor(user, question), new Control(user.getId()));
+        persistResult(user, jobFilterRepository.findByUser(user).orElseThrow(), result);
+        return new BotCommandResponse("Test apply completed in dry-run mode", BotRunStatus.IDLE);
+    }
+
+    public void runAutomation(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, "User not found"));
+        JobFilter filter = jobFilterRepository.findByUser(user)
+                .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, "Job filters are not configured"));
+        try {
+            AutomationRunResult result = automationClient.run(request(user, properties.bot().dryRun()),
+                    question -> aiAnswerService.answerFor(user, question), new Control(user.getId()));
+            persistResult(user, filter, result);
+            if (result.isCaptchaDetected()) {
+                botStatusService.set(user, BotRunStatus.CAPTCHA_REQUIRED, false, true, true, "Captcha detected. Manual login required.");
+                botLogService.warn(user, "Captcha detected. Automation paused.");
+                return;
+            }
+            botStatusService.set(user, BotRunStatus.STOPPED, false, false, false, "Automation completed");
+            notificationService.dailySummary("Naukri bot run completed", "Processed " + result.getJobResults().size() + " jobs.");
+        } catch (Exception exception) {
+            botStatusService.set(user, BotRunStatus.FAILED, false, false, false, exception.getMessage());
+            botLogService.error(user, "Automation failed: " + exception.getMessage());
+        }
+    }
+
+    private AutomationRunRequest request(User user, boolean dryRun) {
+        NaukriCredentials credentials = credentialsRepository.findByUser(user)
+                .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, "Naukri credentials are not configured"));
+        JobFilter filter = jobFilterRepository.findByUser(user)
+                .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, "Job filters are not configured"));
+        List<String> resumes = resumeSelectionService.selectResumePaths(user, filter.getKeywords());
+        if (resumes.isEmpty() && credentials.getResumePath() != null && !credentials.getResumePath().isBlank()) {
+            resumes = List.of(credentials.getResumePath());
+        }
+        return new AutomationRunRequest(
+                credentials.getEmail(),
+                encryptionService.decrypt(credentials.getEncryptedPassword()),
+                new AutomationJobFilter(filter.getKeywords(), filter.getExperience(), filter.getLocation(), filter.getSalary(),
+                        filter.getWorkMode(), filter.getFreshness(), ListTextMapper.split(filter.getPreferredCompanies()),
+                        ListTextMapper.split(filter.getBlacklistedCompanies()), filter.isAutoApply(), filter.isExternalCareerApply(),
+                        filter.getDailyApplyLimit(), filter.isEasyApplyOnly(), filter.getDuplicatePreventionDays()),
+                resumes,
+                Path.of(properties.bot().storageDir()),
+                properties.bot().headless(),
+                dryRun,
+                new ProxySettings(properties.bot().proxyHost(), properties.bot().proxyPort(), properties.bot().proxyUsername(), properties.bot().proxyPassword()),
+                properties.bot().maxRetries());
+    }
+
+    private void persistResult(User user, JobFilter filter, AutomationRunResult result) {
+        for (String message : result.getMessages()) {
+            botLogService.info(user, message);
+        }
+        for (JobApplicationResult jobResult : result.getJobResults()) {
+            if (isDuplicate(user, filter, jobResult)) {
+                botLogService.warn(user, "Skipped duplicate: " + jobResult.companyName() + " - " + jobResult.jobTitle());
+                continue;
+            }
+            AppliedJob job = new AppliedJob();
+            job.setUser(user);
+            job.setCompanyName(defaultText(jobResult.companyName(), "Unknown Company"));
+            job.setJobTitle(defaultText(jobResult.jobTitle(), "Unknown Job"));
+            job.setApplyDateTime(jobResult.applyDateTime());
+            job.setStatus(ApplyStatus.valueOf(jobResult.status().name()));
+            job.setJobUrl(jobResult.jobUrl());
+            job.setExperience(jobResult.experience());
+            job.setSalary(jobResult.salary());
+            job.setLocation(jobResult.location());
+            job.setRedirectedExternalSite(jobResult.redirectedExternalSite());
+            job.setFailureReason(jobResult.failureReason());
+            job.setScreenshotPath(jobResult.screenshotPath());
+            job.setAttempts(jobResult.attempts());
+            job.setMatchScore(smartMatchService.score(filter, job.getJobTitle(), job.getCompanyName(), ""));
+            job.setCsvFileName(csvService.writeAppliedJob(job));
+            appliedJobRepository.save(job);
+            botLogService.info(user, "Recorded job: " + job.getCompanyName() + " - " + job.getJobTitle() + " [" + job.getStatus() + "]");
+        }
+        result.getExternalRedirects().forEach(redirect -> {
+            ExternalRedirectJob external = new ExternalRedirectJob();
+            external.setUser(user);
+            external.setCompanyName(defaultText(redirect.companyName(), "Unknown Company"));
+            external.setRedirectUrl(redirect.redirectUrl());
+            external.setRedirectDateTime(redirect.redirectDateTime());
+            external.setStatus(ApplyStatus.valueOf(redirect.status().name()));
+            external.setCsvFileName(csvService.writeExternalRedirect(external));
+            externalRedirectJobRepository.save(external);
+        });
+    }
+
+    private boolean isDuplicate(User user, JobFilter filter, JobApplicationResult jobResult) {
+        Instant after = Instant.now().minus(filter.getDuplicatePreventionDays(), ChronoUnit.DAYS);
+        return appliedJobRepository.existsByUserAndCompanyNameIgnoreCaseAndJobTitleIgnoreCaseAndApplyDateTimeAfter(
+                user, defaultText(jobResult.companyName(), "Unknown Company"), defaultText(jobResult.jobTitle(), "Unknown Job"), after);
+    }
+
+    private String defaultText(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private class Control implements AutomationControl {
+        private final Long userId;
+
+        private Control(Long userId) {
+            this.userId = userId;
+        }
+
+        @Override
+        public boolean shouldStop() {
+            return runtimeState.shouldStop(userId);
+        }
+
+        @Override
+        public boolean isPaused() {
+            return runtimeState.isPaused(userId);
+        }
+    }
+}

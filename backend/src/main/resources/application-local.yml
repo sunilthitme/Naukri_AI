@@ -1,0 +1,25 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:naukri_bot;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+
+app:
+  security:
+    jwt-secret: local-development-jwt-secret-32-char
+    encryption-key: local-development-aes-secret-32char
+    token-expiration-minutes: 720
+  bootstrap:
+    admin-email: admin@example.com
+    admin-password: ChangeMe123!
+  bot:
+    storage-dir: storage
+    headless: true
+    dry-run: true
+    mock: true
+    max-retries: 0

@@ -1,0 +1,105 @@
+{
+  "info": {
+    "name": "Naukri AI Job Apply Bot",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Login",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/auth/login",
+        "body": { "mode": "raw", "raw": "{\"email\":\"admin@example.com\",\"password\":\"ChangeMe123!\"}" }
+      }
+    },
+    {
+      "name": "Dashboard",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/api/dashboard"
+      }
+    },
+    {
+      "name": "Save Naukri Credentials",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/settings/credentials",
+        "body": { "mode": "raw", "raw": "{\"email\":\"candidate@example.com\",\"password\":\"secret\",\"resumePath\":\"C:\\\\Users\\\\Admin\\\\Documents\\\\resume.pdf\"}" }
+      }
+    },
+    {
+      "name": "Save Filters",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/settings/filters",
+        "body": { "mode": "raw", "raw": "{\"keywords\":\"java spring boot\",\"experience\":\"5\",\"location\":\"Bengaluru\",\"salary\":\"20\",\"workMode\":\"Remote\",\"freshness\":\"7\",\"preferredCompanies\":[\"Acme\"],\"blacklistedCompanies\":[\"Blocked\"],\"autoApply\":true,\"externalCareerApply\":false,\"dailyApplyLimit\":10,\"easyApplyOnly\":true,\"duplicatePreventionDays\":30}" }
+      }
+    },
+    {
+      "name": "Save Question Answer",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/questions",
+        "body": { "mode": "raw", "raw": "{\"question\":\"What is your current CTC?\",\"answer\":\"25 LPA\"}" }
+      }
+    },
+    {
+      "name": "Start Bot",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/api/bot/start"
+      }
+    },
+    {
+      "name": "Stop Bot",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/api/bot/stop"
+      }
+    },
+    {
+      "name": "Logs",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/api/logs"
+      }
+    },
+    {
+      "name": "Job History",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/api/jobs/history"
+      }
+    },
+    {
+      "name": "Export CSV",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/api/reports/export.csv"
+      }
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+@import '@angular/material/prebuilt-themes/azure-blue.css';
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: Inter, Arial, sans-serif;
+  background: #f5f7fb;
+  color: #172033;
+}
+
+a {
+  color: inherit;
+}
+
+.page {
+  display: grid;
+  gap: 18px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.grid {
+  display: grid;
+  gap: 16px;
+}
+
+.grid.cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid.cols-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.full-width {
+  width: 100%;
+}
+
+.table-wrap {
+  overflow: auto;
+  background: white;
+  border: 1px solid #dde3ee;
+  border-radius: 8px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.muted {
+  color: #667085;
+}
+
+.metric {
+  min-height: 116px;
+}
+
+.metric-value {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+mat-card {
+  border-radius: 8px !important;
+}
+
+@media (max-width: 900px) {
+  .grid.cols-2, .grid.cols-4 {
+    grid-template-columns: 1fr;
+  }
+}
