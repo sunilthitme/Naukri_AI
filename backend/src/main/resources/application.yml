@@ -5,9 +5,9 @@ spring:
   application:
     name: naukri-ai-job-apply-bot
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/naukri_bot}
-    username: ${SPRING_DATASOURCE_USERNAME:naukri_bot}
-    password: ${SPRING_DATASOURCE_PASSWORD:change-me}
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:file:../storage/localdb/naukri_ai_job_apply_bot;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_ON_EXIT=FALSE}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -41,12 +41,12 @@ logging:
 
 app:
   security:
-    jwt-secret: ${APP_JWT_SECRET:}
-    encryption-key: ${APP_ENCRYPTION_KEY:}
+    jwt-secret: ${APP_JWT_SECRET:local-development-jwt-secret-32-char}
+    encryption-key: ${APP_ENCRYPTION_KEY:local-development-aes-secret-32char}
     token-expiration-minutes: ${APP_TOKEN_EXPIRATION_MINUTES:720}
   bootstrap:
-    admin-email: ${APP_BOOTSTRAP_ADMIN_EMAIL:}
-    admin-password: ${APP_BOOTSTRAP_ADMIN_PASSWORD:}
+    admin-email: ${APP_BOOTSTRAP_ADMIN_EMAIL:admin@example.com}
+    admin-password: ${APP_BOOTSTRAP_ADMIN_PASSWORD:ChangeMe123!}
   bot:
     storage-dir: ${BOT_STORAGE_DIR:storage}
     headless: ${BOT_HEADLESS:true}

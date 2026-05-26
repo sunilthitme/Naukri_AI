@@ -15,7 +15,7 @@ Production-ready full-stack application for managing a Naukri job-application au
 - Java 21
 - Maven 3.9+
 - Node.js 22+ with `npm.cmd` on Windows
-- PostgreSQL 16+ for production
+- H2 is used by default for local runs; PostgreSQL 16+ is optional for production
 - Chrome/Chromium for Angular tests and Playwright automation
 
 ## Environment
@@ -26,7 +26,7 @@ Important variables:
 
 - `APP_JWT_SECRET`: at least 32 characters
 - `APP_ENCRYPTION_KEY`: at least 32 characters; first 32 bytes are used for AES
-- `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`
+- `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD` if overriding the default H2 database
 - `APP_BOOTSTRAP_ADMIN_EMAIL`, `APP_BOOTSTRAP_ADMIN_PASSWORD`
 - `BOT_DRY_RUN=true` for safe local testing
 - `BOT_MOCK=true` only for local smoke tests that should not contact Naukri
@@ -44,7 +44,33 @@ Backend: `http://localhost:8080`
 
 ## Run Locally On Windows
 
-Backend with PostgreSQL:
+Backend with the default file-backed H2 database:
+
+```powershell
+cd backend
+mvn clean spring-boot:run
+```
+
+Default local login:
+
+- Email: `admin@example.com`
+- Password: `ChangeMe123!`
+
+If your PowerShell session still has old PostgreSQL variables, clear them before starting:
+
+```powershell
+Remove-Item Env:SPRING_DATASOURCE_URL,Env:SPRING_DATASOURCE_USERNAME,Env:SPRING_DATASOURCE_PASSWORD -ErrorAction SilentlyContinue
+```
+
+Local smoke profile with in-memory H2 and mock automation:
+
+```powershell
+mvn -pl backend -am spring-boot:run -Dspring-boot.run.profiles=local
+```
+
+The default profile stores H2 files under `storage/localdb/`. If Flyway reports a failed local H2 migration from an interrupted run, stop the backend and delete the ignored `storage/localdb/*.db` files, then start again. The `local` profile uses an in-memory H2 database, Flyway migrations, a bootstrap admin, dry-run automation, and mock automation.
+
+Production PostgreSQL override:
 
 ```powershell
 $env:APP_JWT_SECRET="replace-with-at-least-32-characters"
@@ -54,23 +80,9 @@ $env:APP_BOOTSTRAP_ADMIN_PASSWORD="ChangeMe123!"
 $env:SPRING_DATASOURCE_URL="jdbc:postgresql://localhost:5432/naukri_bot"
 $env:SPRING_DATASOURCE_USERNAME="naukri_bot"
 $env:SPRING_DATASOURCE_PASSWORD="change-me"
-mvn -pl backend -am spring-boot:run
-```
-
-You can also run from inside the backend folder:
-
-```powershell
 cd backend
 mvn clean spring-boot:run
 ```
-
-Local smoke profile without PostgreSQL:
-
-```powershell
-mvn -pl backend -am spring-boot:run -Dspring-boot.run.profiles=local
-```
-
-The `local` profile uses an in-memory H2 database, Flyway migrations, a bootstrap admin, dry-run automation, and mock automation.
 
 Frontend:
 

@@ -12,9 +12,10 @@ backend/logs/
 storage/screenshots/*
 storage/csv/*.csv
 storage/reports/*.xlsx
-storage/localdb/
+storage/localdb/*
 !storage/csv/.gitkeep
 !storage/csv/applied_jobs_sample.csv
 !storage/csv/external_redirect_jobs_sample.csv
 !storage/screenshots/.gitkeep
 !storage/reports/.gitkeep
+!storage/localdb/.gitkeep

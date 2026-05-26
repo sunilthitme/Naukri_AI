@@ -1,6 +1,23 @@
 # Environment Setup Guide
 
-## PostgreSQL
+## Local H2 Database
+
+The default backend profile uses a file-backed H2 database, so local Windows runs do not require PostgreSQL:
+
+```powershell
+cd backend
+mvn clean spring-boot:run
+```
+
+Database files are stored under `storage/localdb/`. If Flyway reports a failed local H2 migration from an interrupted run, stop the backend and delete the ignored `storage/localdb/*.db` files, then start again.
+
+If your shell still has old PostgreSQL variables, clear them before starting:
+
+```powershell
+Remove-Item Env:SPRING_DATASOURCE_URL,Env:SPRING_DATASOURCE_USERNAME,Env:SPRING_DATASOURCE_PASSWORD -ErrorAction SilentlyContinue
+```
+
+## Production PostgreSQL
 
 Create the database and user:
 
