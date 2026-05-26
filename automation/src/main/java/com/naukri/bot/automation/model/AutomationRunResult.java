@@ -8,6 +8,8 @@ public class AutomationRunResult {
     private final Instant startedAt = Instant.now();
     private Instant finishedAt;
     private boolean captchaDetected;
+    private boolean loginFailed;
+    private String failureReason;
     private final List<JobApplicationResult> jobResults = new ArrayList<>();
     private final List<ExternalRedirectResult> externalRedirects = new ArrayList<>();
     private final List<String> messages = new ArrayList<>();
@@ -30,6 +32,22 @@ public class AutomationRunResult {
 
     public void setCaptchaDetected(boolean captchaDetected) {
         this.captchaDetected = captchaDetected;
+    }
+
+    public boolean isLoginFailed() {
+        return loginFailed;
+    }
+
+    public void setLoginFailed(boolean loginFailed) {
+        this.loginFailed = loginFailed;
+    }
+
+    public String getFailureReason() {
+        return failureReason;
+    }
+
+    public void setFailureReason(String failureReason) {
+        this.failureReason = failureReason;
     }
 
     public List<JobApplicationResult> getJobResults() {

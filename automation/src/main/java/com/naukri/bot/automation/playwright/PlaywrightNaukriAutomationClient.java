@@ -15,6 +15,8 @@ import com.naukri.bot.automation.model.AutomationRunResult;
 import com.naukri.bot.automation.model.DiscoveredJob;
 import com.naukri.bot.automation.model.ExternalRedirectResult;
 import com.naukri.bot.automation.model.JobApplicationResult;
+import com.naukri.bot.automation.model.LoginStatus;
+import com.naukri.bot.automation.model.LoginTestResult;
 import com.naukri.bot.automation.playwright.page.NaukriJobPage;
 import com.naukri.bot.automation.playwright.page.NaukriLoginPage;
 import com.naukri.bot.automation.playwright.page.NaukriSearchPage;
@@ -50,7 +52,21 @@ public class PlaywrightNaukriAutomationClient implements NaukriAutomationClient 
             Page page = context.newPage();
 
             NaukriLoginPage loginPage = new NaukriLoginPage(page);
-            loginPage.login(request.naukriEmail(), request.naukriPassword());
+            LoginTestResult loginResult = loginPage.login(request.naukriEmail(), request.naukriPassword());
+            result.getMessages().add(loginResult.message());
+            if (!loginResult.success()) {
+                LoginTestResult withScreenshot = loginResult.withScreenshot(screenshot(page, request.storageDirectory(), "naukri_login", 1));
+                result.setFailureReason(withScreenshot.message());
+                result.setLoginFailed(true);
+                result.getMessages().add("Naukri login failed: " + withScreenshot.message());
+                if (withScreenshot.status() == LoginStatus.CAPTCHA_DETECTED) {
+                    result.setCaptchaDetected(true);
+                }
+                result.finish();
+                context.close();
+                browser.close();
+                return result;
+            }
             if (loginPage.captchaDetected()) {
                 result.setCaptchaDetected(true);
                 result.getMessages().add("Captcha detected during login. Automation paused for manual action.");
@@ -92,19 +108,38 @@ public class PlaywrightNaukriAutomationClient implements NaukriAutomationClient 
     }
 
     @Override
-    public boolean testLogin(AutomationRunRequest request) {
-        AutomationRunResult result = run(request, question -> java.util.Optional.empty(), new AutomationControl() {
-            @Override
-            public boolean shouldStop() {
-                return true;
+    public LoginTestResult testLogin(AutomationRunRequest request) {
+        try (Playwright playwright = Playwright.create()) {
+            Browser browser = playwright.chromium().launch(launchOptions(request));
+            BrowserContext context = browser.newContext(new Browser.NewContextOptions()
+                    .setViewportSize(1366, 768)
+                    .setIgnoreHTTPSErrors(true));
+            Page page = context.newPage();
+            LoginTestResult result = new NaukriLoginPage(page).login(request.naukriEmail(), request.naukriPassword());
+            if (!result.success()) {
+                result = result.withScreenshot(screenshot(page, request.storageDirectory(), "naukri_login_test", 1));
             }
+            context.close();
+            browser.close();
+            return result;
+        } catch (Exception exception) {
+            log.error("Naukri login test failed", exception);
+            return new LoginTestResult(false, LoginStatus.FAILED,
+                    "Naukri login test failed: " + exception.getMessage(), null, null);
+        }
+    }
 
-            @Override
-            public boolean isPaused() {
-                return false;
+    private BrowserType.LaunchOptions launchOptions(AutomationRunRequest request) {
+        BrowserType.LaunchOptions launchOptions = new BrowserType.LaunchOptions().setHeadless(request.headless());
+        if (request.proxy() != null && request.proxy().enabled()) {
+            Proxy proxy = new Proxy(request.proxy().server());
+            if (request.proxy().username() != null && !request.proxy().username().isBlank()) {
+                proxy.setUsername(request.proxy().username());
+                proxy.setPassword(request.proxy().password());
             }
-        });
-        return !result.isCaptchaDetected() && result.getMessages().stream().noneMatch(message -> message.toLowerCase().contains("login"));
+            launchOptions.setProxy(proxy);
+        }
+        return launchOptions;
     }
 
     private JobApplicationResult applyWithRetry(BrowserContext context,

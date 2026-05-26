@@ -8,6 +8,7 @@ import com.naukri.bot.automation.model.AutomationRunRequest;
 import com.naukri.bot.automation.model.AutomationRunResult;
 import com.naukri.bot.automation.model.ExternalRedirectResult;
 import com.naukri.bot.automation.model.JobApplicationResult;
+import com.naukri.bot.automation.model.LoginTestResult;
 
 import java.time.Instant;
 
@@ -45,8 +46,12 @@ public class MockNaukriAutomationClient implements NaukriAutomationClient {
     }
 
     @Override
-    public boolean testLogin(AutomationRunRequest request) {
-        return request.naukriEmail() != null && !request.naukriEmail().isBlank()
+    public LoginTestResult testLogin(AutomationRunRequest request) {
+        boolean success = request.naukriEmail() != null && !request.naukriEmail().isBlank()
                 && request.naukriPassword() != null && !request.naukriPassword().isBlank();
+        return success
+                ? LoginTestResult.success("mock://naukri-login")
+                : new LoginTestResult(false, com.naukri.bot.automation.model.LoginStatus.INVALID_CREDENTIALS,
+                "Mock login requires non-empty Naukri credentials.", "mock://naukri-login", null);
     }
 }

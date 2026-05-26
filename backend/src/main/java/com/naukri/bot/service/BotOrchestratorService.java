@@ -6,6 +6,8 @@ import com.naukri.bot.automation.model.AutomationJobFilter;
 import com.naukri.bot.automation.model.AutomationRunRequest;
 import com.naukri.bot.automation.model.AutomationRunResult;
 import com.naukri.bot.automation.model.JobApplicationResult;
+import com.naukri.bot.automation.model.LoginStatus;
+import com.naukri.bot.automation.model.LoginTestResult;
 import com.naukri.bot.automation.model.ProxySettings;
 import com.naukri.bot.config.AppProperties;
 import com.naukri.bot.domain.AppliedJob;
@@ -85,15 +87,31 @@ public class BotOrchestratorService {
     }
 
     public BotCommandResponse testLogin(User user) {
-        boolean success = automationClient.testLogin(request(user, true));
-        botLogService.info(user, success ? "Naukri login test passed" : "Naukri login test failed");
-        return new BotCommandResponse(success ? "Login test passed" : "Login test failed", success ? BotRunStatus.IDLE : BotRunStatus.FAILED);
+        LoginTestResult result = automationClient.testLogin(request(user, true));
+        if (result.success()) {
+            botStatusService.set(user, BotRunStatus.IDLE, false, false, false, result.message());
+            botLogService.info(user, result.message());
+            return new BotCommandResponse(result.message(), BotRunStatus.IDLE);
+        }
+        boolean captcha = result.status() == LoginStatus.CAPTCHA_DETECTED;
+        BotRunStatus status = captcha ? BotRunStatus.CAPTCHA_REQUIRED : BotRunStatus.FAILED;
+        botStatusService.set(user, status, false, captcha, captcha, result.message());
+        botLogService.error(user, result.message());
+        return new BotCommandResponse(result.message(), status);
     }
 
     public BotCommandResponse testApply(User user) {
         AutomationRunRequest request = request(user, true);
         AutomationRunResult result = automationClient.run(request, question -> aiAnswerService.answerFor(user, question), new Control(user.getId()));
         persistResult(user, jobFilterRepository.findByUser(user).orElseThrow(), result);
+        if (result.isCaptchaDetected()) {
+            botStatusService.set(user, BotRunStatus.CAPTCHA_REQUIRED, false, true, true, "Captcha detected. Manual login required.");
+            return new BotCommandResponse("Captcha detected. Manual login required.", BotRunStatus.CAPTCHA_REQUIRED);
+        }
+        if (result.isLoginFailed()) {
+            botStatusService.set(user, BotRunStatus.FAILED, false, false, false, result.getFailureReason());
+            return new BotCommandResponse(result.getFailureReason(), BotRunStatus.FAILED);
+        }
         return new BotCommandResponse("Test apply completed in dry-run mode", BotRunStatus.IDLE);
     }
 
@@ -109,6 +127,11 @@ public class BotOrchestratorService {
             if (result.isCaptchaDetected()) {
                 botStatusService.set(user, BotRunStatus.CAPTCHA_REQUIRED, false, true, true, "Captcha detected. Manual login required.");
                 botLogService.warn(user, "Captcha detected. Automation paused.");
+                return;
+            }
+            if (result.isLoginFailed()) {
+                botStatusService.set(user, BotRunStatus.FAILED, false, false, false, result.getFailureReason());
+                botLogService.error(user, result.getFailureReason());
                 return;
             }
             botStatusService.set(user, BotRunStatus.STOPPED, false, false, false, "Automation completed");
