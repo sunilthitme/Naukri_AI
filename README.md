@@ -89,7 +89,7 @@ Frontend:
 ```powershell
 cd frontend
 npm.cmd install
-npm.cmd start -- --proxy-config proxy.conf.json
+npm.cmd start
 ```
 
 ## Build And Test

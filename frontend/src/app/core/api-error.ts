@@ -2,6 +2,9 @@ import { HttpErrorResponse } from '@angular/common/http';
 
 export function apiErrorMessage(error: unknown, fallback = 'Request failed'): string {
   if (error instanceof HttpErrorResponse) {
+    if (error.status === 200 && error.message.includes('Http failure during parsing')) {
+      return 'Frontend dev proxy is not active. Restart the Angular app with npm.cmd start so /api requests forward to Spring Boot.';
+    }
     if (error.status === 0) {
       return 'Backend is not reachable. Check that the Spring Boot API is running.';
     }
