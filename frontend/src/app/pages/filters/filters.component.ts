@@ -9,6 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ApiService } from '../../core/api.service';
+import { apiErrorMessage } from '../../core/api-error';
 import { JobFilterResponse } from '../../core/models';
 
 @Component({
@@ -120,12 +121,13 @@ export class FiltersComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.api.filters().subscribe((response) => {
-      this.form.patchValue({
-        ...response,
-        preferredCompanies: response.preferredCompanies.join('\n'),
-        blacklistedCompanies: response.blacklistedCompanies.join('\n')
-      });
+    this.api.filters().subscribe({
+      next: (response) => this.form.patchValue({
+          ...response,
+          preferredCompanies: response.preferredCompanies.join('\n'),
+          blacklistedCompanies: response.blacklistedCompanies.join('\n')
+        }),
+      error: (error) => this.snack.open(apiErrorMessage(error, 'Unable to load filters'), 'Close', { duration: 5000 })
     });
   }
 
@@ -139,7 +141,7 @@ export class FiltersComponent implements OnInit {
     };
     this.api.saveFilters(payload).subscribe({
       next: () => this.snack.open('Filters saved', 'Close', { duration: 3000 }),
-      error: () => this.snack.open('Unable to save filters', 'Close', { duration: 3000 })
+      error: (error) => this.snack.open(apiErrorMessage(error, 'Unable to save filters'), 'Close', { duration: 5000 })
     });
   }
 

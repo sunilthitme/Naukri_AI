@@ -3,14 +3,16 @@ import { DatePipe } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { timer, switchMap } from 'rxjs';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { EMPTY, catchError, switchMap, timer } from 'rxjs';
 import { ApiService } from '../../core/api.service';
+import { apiErrorMessage } from '../../core/api-error';
 import { BotLog } from '../../core/models';
 
 @Component({
   selector: 'app-logs',
   standalone: true,
-  imports: [DatePipe, MatButtonModule, MatIconModule],
+  imports: [DatePipe, MatButtonModule, MatIconModule, MatSnackBarModule],
   template: `
     <section class="page">
       <div class="page-header">
@@ -56,16 +58,25 @@ import { BotLog } from '../../core/models';
 export class LogsComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly snack = inject(MatSnackBar);
   readonly logs = signal<BotLog[]>([]);
 
   ngOnInit(): void {
     timer(0, 5000).pipe(
-      switchMap(() => this.api.logs()),
+      switchMap(() => this.api.logs().pipe(
+        catchError((error) => {
+          this.snack.open(apiErrorMessage(error, 'Unable to load logs'), 'Close', { duration: 5000 });
+          return EMPTY;
+        })
+      )),
       takeUntilDestroyed(this.destroyRef)
     ).subscribe((response) => this.logs.set(response));
   }
 
   load(): void {
-    this.api.logs().subscribe((response) => this.logs.set(response));
+    this.api.logs().subscribe({
+      next: (response) => this.logs.set(response),
+      error: (error) => this.snack.open(apiErrorMessage(error, 'Unable to load logs'), 'Close', { duration: 5000 })
+    });
   }
 }

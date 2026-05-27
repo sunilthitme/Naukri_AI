@@ -11,6 +11,7 @@ export interface DashboardResponse {
   todaysApplications: number;
   botStatus: string;
   botRunning: boolean;
+  botMessage: string | null;
   lastRunTime: string | null;
 }
 

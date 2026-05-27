@@ -26,6 +26,8 @@ import com.naukri.bot.repository.NaukriCredentialsRepository;
 import com.naukri.bot.repository.UserRepository;
 import com.naukri.bot.util.ListTextMapper;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -39,6 +41,8 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class BotOrchestratorService {
+    private static final Logger log = LoggerFactory.getLogger(BotOrchestratorService.class);
+
     private final NaukriAutomationClient automationClient;
     private final TaskExecutor botTaskExecutor;
     private final AppProperties properties;
@@ -58,10 +62,23 @@ public class BotOrchestratorService {
     private final NotificationService notificationService;
 
     public BotCommandResponse start(User user) {
+        String validationFailure = validateStartRequest(user);
+        if (validationFailure != null) {
+            botStatusService.set(user, BotRunStatus.FAILED, false, false, false, validationFailure);
+            botLogService.error(user, validationFailure);
+            return new BotCommandResponse(validationFailure, BotRunStatus.FAILED);
+        }
         botStatusService.set(user, BotRunStatus.RUNNING, true, false, false, "Automation started");
         botLogService.info(user, "Automation queued");
         runtimeState.start(user.getId());
-        botTaskExecutor.execute(() -> runAutomation(user.getId()));
+        try {
+            botTaskExecutor.execute(() -> runAutomation(user.getId()));
+        } catch (Exception exception) {
+            String message = "Unable to queue automation: " + friendlyMessage(exception);
+            botStatusService.set(user, BotRunStatus.FAILED, false, false, false, message);
+            botLogService.error(user, message);
+            return new BotCommandResponse(message, BotRunStatus.FAILED);
+        }
         return new BotCommandResponse("Bot started", BotRunStatus.RUNNING);
     }
 
@@ -116,13 +133,15 @@ public class BotOrchestratorService {
     }
 
     public void runAutomation(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, "User not found"));
-        JobFilter filter = jobFilterRepository.findByUser(user)
-                .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, "Job filters are not configured"));
+        User user = null;
         try {
+            user = userRepository.findById(userId)
+                    .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, "User not found"));
+            User automationUser = user;
+            JobFilter filter = jobFilterRepository.findByUser(user)
+                    .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, "Job filters are not configured"));
             AutomationRunResult result = automationClient.run(request(user, properties.bot().dryRun()),
-                    question -> aiAnswerService.answerFor(user, question), new Control(user.getId()));
+                    question -> aiAnswerService.answerFor(automationUser, question), new Control(user.getId()));
             persistResult(user, filter, result);
             if (result.isCaptchaDetected()) {
                 botStatusService.set(user, BotRunStatus.CAPTCHA_REQUIRED, false, true, true, "Captcha detected. Manual login required.");
@@ -130,15 +149,30 @@ public class BotOrchestratorService {
                 return;
             }
             if (result.isLoginFailed()) {
-                botStatusService.set(user, BotRunStatus.FAILED, false, false, false, result.getFailureReason());
-                botLogService.error(user, result.getFailureReason());
+                String message = failureMessage(result.getFailureReason());
+                botStatusService.set(user, BotRunStatus.FAILED, false, false, false, message);
+                botLogService.error(user, message);
                 return;
             }
             botStatusService.set(user, BotRunStatus.STOPPED, false, false, false, "Automation completed");
             notificationService.dailySummary("Naukri bot run completed", "Processed " + result.getJobResults().size() + " jobs.");
         } catch (Exception exception) {
-            botStatusService.set(user, BotRunStatus.FAILED, false, false, false, exception.getMessage());
-            botLogService.error(user, "Automation failed: " + exception.getMessage());
+            String message = "Automation failed: " + friendlyMessage(exception);
+            if (user == null) {
+                log.error(message, exception);
+                return;
+            }
+            botStatusService.set(user, BotRunStatus.FAILED, false, false, false, message);
+            botLogService.error(user, message);
+        }
+    }
+
+    private String validateStartRequest(User user) {
+        try {
+            request(user, properties.bot().dryRun());
+            return null;
+        } catch (Exception exception) {
+            return "Cannot start bot: " + friendlyMessage(exception);
         }
     }
 
@@ -214,6 +248,27 @@ public class BotOrchestratorService {
 
     private String defaultText(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private String failureMessage(String message) {
+        return message == null || message.isBlank() ? "Automation failed. Check logs for details." : message;
+    }
+
+    private String friendlyMessage(Exception exception) {
+        Throwable root = exception;
+        while (root.getCause() != null) {
+            root = root.getCause();
+        }
+        String message = exception.getMessage();
+        String rootMessage = root.getMessage();
+        if ((message != null && message.contains("Unable to decrypt value"))
+                || (rootMessage != null && rootMessage.contains("Tag mismatch"))) {
+            return "Unable to decrypt saved Naukri password. Re-save Naukri credentials using the current encryption key.";
+        }
+        if (message == null || message.isBlank()) {
+            message = rootMessage;
+        }
+        return message == null || message.isBlank() ? exception.getClass().getSimpleName() : message;
     }
 
     private class Control implements AutomationControl {

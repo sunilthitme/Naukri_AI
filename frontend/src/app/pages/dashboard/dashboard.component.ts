@@ -6,6 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ApiService } from '../../core/api.service';
+import { apiErrorMessage } from '../../core/api-error';
 import { DashboardResponse } from '../../core/models';
 
 @Component({
@@ -60,6 +61,11 @@ import { DashboardResponse } from '../../core/models';
           <mat-card-title>Bot status</mat-card-title>
           <mat-card-subtitle>{{ data()?.botStatus || 'IDLE' }}</mat-card-subtitle>
         </mat-card-header>
+        @if (data()?.botMessage) {
+          <mat-card-content>
+            <p class="muted">{{ data()?.botMessage }}</p>
+          </mat-card-content>
+        }
       </mat-card>
     </section>
   `
@@ -81,9 +87,9 @@ export class DashboardComponent implements OnInit {
         this.data.set(response);
         this.loading.set(false);
       },
-      error: () => {
+      error: (error) => {
         this.loading.set(false);
-        this.snack.open('Unable to load dashboard', 'Close', { duration: 3000 });
+        this.snack.open(apiErrorMessage(error, 'Unable to load dashboard'), 'Close', { duration: 5000 });
       }
     });
   }
@@ -98,7 +104,7 @@ export class DashboardComponent implements OnInit {
         anchor.click();
         URL.revokeObjectURL(url);
       },
-      error: () => this.snack.open('Unable to export report', 'Close', { duration: 3000 })
+      error: (error) => this.snack.open(apiErrorMessage(error, 'Unable to export report'), 'Close', { duration: 5000 })
     });
   }
 }

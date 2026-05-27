@@ -9,6 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 import { ApiService } from '../../core/api.service';
+import { apiErrorMessage } from '../../core/api-error';
 import { QuestionAnswer } from '../../core/models';
 
 @Component({
@@ -95,7 +96,10 @@ export class QuestionsComponent implements OnInit {
   }
 
   load(): void {
-    this.api.questions().subscribe((response) => this.questions.set(response));
+    this.api.questions().subscribe({
+      next: (response) => this.questions.set(response),
+      error: (error) => this.snack.open(apiErrorMessage(error, 'Unable to load answers'), 'Close', { duration: 5000 })
+    });
   }
 
   edit(row: QuestionAnswer): void {
@@ -109,7 +113,7 @@ export class QuestionsComponent implements OnInit {
         this.snack.open('Answer saved', 'Close', { duration: 2500 });
         this.load();
       },
-      error: () => this.snack.open('Unable to save answer', 'Close', { duration: 3000 })
+      error: (error) => this.snack.open(apiErrorMessage(error, 'Unable to save answer'), 'Close', { duration: 5000 })
     });
   }
 }

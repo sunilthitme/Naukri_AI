@@ -15,6 +15,7 @@ public final class DashboardDtos {
             long todaysApplications,
             BotRunStatus botStatus,
             boolean botRunning,
+            String botMessage,
             Instant lastRunTime
     ) {
     }

@@ -31,6 +31,7 @@ public class DashboardService {
                         today.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC)),
                 status.getStatus(),
                 status.isRunning(),
+                status.getMessage(),
                 status.getLastRunTime()
         );
     }

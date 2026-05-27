@@ -7,6 +7,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ApiService } from '../../core/api.service';
+import { apiErrorMessage } from '../../core/api-error';
 
 @Component({
   selector: 'app-credentials',
@@ -56,8 +57,9 @@ export class CredentialsComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.api.credentials().subscribe((response) => {
-      this.form.patchValue({ email: response.email ?? '', resumePath: response.resumePath ?? '' });
+    this.api.credentials().subscribe({
+      next: (response) => this.form.patchValue({ email: response.email ?? '', resumePath: response.resumePath ?? '' }),
+      error: (error) => this.snack.open(apiErrorMessage(error, 'Unable to load credentials'), 'Close', { duration: 5000 })
     });
   }
 
@@ -67,7 +69,7 @@ export class CredentialsComponent implements OnInit {
         this.form.controls.password.reset('');
         this.snack.open('Credentials saved with AES encryption', 'Close', { duration: 3000 });
       },
-      error: () => this.snack.open('Unable to save credentials', 'Close', { duration: 3000 })
+      error: (error) => this.snack.open(apiErrorMessage(error, 'Unable to save credentials'), 'Close', { duration: 5000 })
     });
   }
 }

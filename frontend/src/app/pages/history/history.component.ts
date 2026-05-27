@@ -2,15 +2,17 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ApiService } from '../../core/api.service';
+import { apiErrorMessage } from '../../core/api-error';
 import { AppliedJob } from '../../core/models';
 
 @Component({
   selector: 'app-history',
   standalone: true,
-  imports: [DatePipe, MatButtonModule, MatIconModule, MatTableModule, MatTooltipModule],
+  imports: [DatePipe, MatButtonModule, MatIconModule, MatSnackBarModule, MatTableModule, MatTooltipModule],
   template: `
     <section class="page">
       <div class="page-header">
@@ -62,6 +64,7 @@ import { AppliedJob } from '../../core/models';
 })
 export class HistoryComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly snack = inject(MatSnackBar);
   readonly columns = ['companyName', 'jobTitle', 'applyDate', 'status', 'redirectedExternalSite', 'csvFileName', 'failureReason'];
   readonly jobs = signal<AppliedJob[]>([]);
 
@@ -70,6 +73,9 @@ export class HistoryComponent implements OnInit {
   }
 
   load(): void {
-    this.api.history().subscribe((response) => this.jobs.set(response));
+    this.api.history().subscribe({
+      next: (response) => this.jobs.set(response),
+      error: (error) => this.snack.open(apiErrorMessage(error, 'Unable to load job history'), 'Close', { duration: 5000 })
+    });
   }
 }

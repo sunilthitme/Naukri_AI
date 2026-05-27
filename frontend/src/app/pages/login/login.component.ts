@@ -9,6 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { finalize } from 'rxjs';
+import { apiErrorMessage } from '../../core/api-error';
 import { AuthService } from '../../core/auth.service';
 
 @Component({
@@ -103,7 +104,7 @@ export class LoginComponent {
       .pipe(finalize(() => this.loading = false))
       .subscribe({
         next: () => void this.router.navigate(['/dashboard']),
-        error: () => this.snack.open('Login failed', 'Close', { duration: 3500 })
+        error: (error) => this.snack.open(apiErrorMessage(error, 'Login failed'), 'Close', { duration: 5000 })
       });
   }
 }
