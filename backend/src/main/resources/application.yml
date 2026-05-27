@@ -48,7 +48,7 @@ app:
     admin-email: ${APP_BOOTSTRAP_ADMIN_EMAIL:admin@example.com}
     admin-password: ${APP_BOOTSTRAP_ADMIN_PASSWORD:ChangeMe123!}
   bot:
-    storage-dir: ${BOT_STORAGE_DIR:storage}
+    storage-dir: ${BOT_STORAGE_DIR:../storage}
     headless: ${BOT_HEADLESS:true}
     dry-run: ${BOT_DRY_RUN:true}
     mock: ${BOT_MOCK:false}
@@ -58,6 +58,7 @@ app:
     proxy-username: ${BOT_PROXY_USERNAME:}
     proxy-password: ${BOT_PROXY_PASSWORD:}
     manual-login-timeout-seconds: ${BOT_MANUAL_LOGIN_TIMEOUT_SECONDS:600}
+    question-answer-timeout-seconds: ${BOT_QUESTION_ANSWER_TIMEOUT_SECONDS:600}
   scheduler:
     poll-delay-ms: ${SCHEDULER_POLL_DELAY_MS:60000}
   llm:

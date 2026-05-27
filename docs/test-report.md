@@ -12,6 +12,7 @@ Generated on 2026-05-27.
 | Browser UI smoke | login, credentials, filters, Q&A, test apply, dashboard | Passed |
 | Naukri login handling regression | `mvn test` with invalid/captcha/success classifiers | Passed |
 | Manual captcha recovery regression | Maven/Angular compile plus local API startup | Passed: `/api/bot/manual-login` route and UI action compiled successfully |
+| Live question popup regression | Maven/Angular compile plus API endpoint smoke | Passed: pending-question endpoints and Angular dialog compiled successfully |
 
 Notes:
 
@@ -20,3 +21,4 @@ Notes:
 - Browser screenshot: `docs/ui-dashboard-smoke.png`.
 - 2026-05-26 update: tightened real Naukri login detection so invalid credentials, captcha, OTP, unchanged login page, and missing login form are surfaced as bot failures with log messages.
 - 2026-05-27 update: added manual captcha login recovery. The bot opens a visible browser, waits for user login, and continues automation after login is detected.
+- 2026-05-27 update: added live apply-question popup handling and more robust CSV/Excel download buttons on History and Dashboard.

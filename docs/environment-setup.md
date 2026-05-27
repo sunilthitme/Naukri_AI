@@ -54,6 +54,14 @@ Naukri captcha and OTP prompts must be completed by the user. When the bot repor
 BOT_MANUAL_LOGIN_TIMEOUT_SECONDS=600
 ```
 
+## Live Question Popup
+
+When a Naukri apply popup asks a question that is not already saved in Q&A, the backend waits and the Angular app shows an answer dialog. Submit the answer in the dialog to save it and continue the same apply flow.
+
+```env
+BOT_QUESTION_ANSWER_TIMEOUT_SECONDS=600
+```
+
 ## Safe Automation Mode
 
 Keep dry run enabled until the account, filters, resume paths, proxy, and compliance review are complete:

@@ -31,6 +31,7 @@ Important variables:
 - `BOT_DRY_RUN=true` for safe local testing
 - `BOT_MOCK=true` only for local smoke tests that should not contact Naukri
 - `BOT_MANUAL_LOGIN_TIMEOUT_SECONDS` for the manual captcha login window, default `600`
+- `BOT_QUESTION_ANSWER_TIMEOUT_SECONDS` for the live question answer popup window, default `600`
 - `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL` for compatible LLM scoring
 
 ## Run With Docker
@@ -117,6 +118,12 @@ npm.cmd test
 When Naukri shows captcha, OTP, or a human verification page, the bot marks the run as `CAPTCHA_REQUIRED` and the Bot Control page shows `Login Manually & Continue`. Click it to open a visible Playwright browser on the backend machine, complete the Naukri login manually, and the automation will continue from the pending search/apply flow after login is detected.
 
 The manual wait time is controlled by `BOT_MANUAL_LOGIN_TIMEOUT_SECONDS`. The default is 10 minutes.
+
+## Live Apply Question Handling
+
+During an apply flow, saved Q&A entries are matched and filled automatically. If Naukri asks a new question, the automation pauses on that job and the Angular shell shows an `Answer required` popup. Enter the answer and click `Save Answer & Continue`; the answer is stored permanently and Playwright continues filling the same Naukri form.
+
+The wait time is controlled by `BOT_QUESTION_ANSWER_TIMEOUT_SECONDS`. Keep `BOT_DRY_RUN=false` when you want real applications submitted; with dry-run enabled the bot opens jobs and records dry-run rows without clicking apply.
 
 ## API Collection
 

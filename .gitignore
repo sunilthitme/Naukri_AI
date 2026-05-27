@@ -9,6 +9,7 @@ dist/
 *.local
 .env
 backend/logs/
+backend/storage/
 storage/screenshots/*
 storage/csv/*.csv
 storage/reports/*.xlsx

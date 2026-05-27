@@ -17,6 +17,8 @@ Base path: `/api`
 | GET | `/questions` | List learned answers |
 | POST | `/questions` | Save answer |
 | GET | `/questions/match?question=` | Test fuzzy answer match |
+| GET | `/questions/pending` | Read the current live apply question, if automation is waiting |
+| POST | `/questions/pending/{id}/answer` | Submit an answer for the live apply question and continue automation |
 | GET | `/bot/status` | Current bot state |
 | POST | `/bot/start` | Start automation |
 | POST | `/bot/manual-login` | Open visible browser for manual captcha login, then continue automation |

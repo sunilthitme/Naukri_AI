@@ -15,6 +15,8 @@ import java.time.Instant;
 import java.util.Locale;
 
 public class NaukriJobPage {
+    private static final int MAX_APPLY_STEPS = 6;
+
     private final Page page;
     private final AutomationActivityListener activityListener;
     private final HumanBehavior human = new HumanBehavior();
@@ -70,28 +72,44 @@ public class NaukriJobPage {
             return result(job, ApplyStatus.EXTERNAL_REDIRECT, null, true, attempt);
         }
 
-        AnswerOutcome answerOutcome = answerQuestions(answerProvider);
-        if (answerOutcome == AnswerOutcome.NEEDS_USER_INPUT) {
-            activity("Application question needs a saved answer for: " + safe(job.jobTitle()));
-            return result(job, ApplyStatus.QUESTION_NEEDS_ANSWER, "A question needs a saved answer", false, attempt);
-        }
-
-        Locator submitButton = page.locator("button:has-text('Submit'), button:has-text('Send'), button:has-text('Apply')").first();
-        if (submitButton.count() > 0) {
-            activity("Submitting application for: " + safe(job.jobTitle()));
+        for (int step = 1; step <= MAX_APPLY_STEPS; step++) {
+            activity("Checking application step " + step + " for: " + safe(job.jobTitle()));
+            AnswerOutcome answerOutcome = answerQuestions(answerProvider);
+            if (answerOutcome == AnswerOutcome.NEEDS_USER_INPUT) {
+                activity("Application question still needs an answer for: " + safe(job.jobTitle()));
+                return result(job, ApplyStatus.QUESTION_NEEDS_ANSWER, "A question needs a saved answer", false, attempt);
+            }
+            if (applicationComplete()) {
+                activity("Application success detected for: " + safe(job.jobTitle()));
+                return result(job, ApplyStatus.SUCCESS, null, false, attempt);
+            }
+            Locator submitButton = firstVisible("button:has-text('Submit'), button:has-text('Send'), button:has-text('Apply'), "
+                    + "button:has-text('Continue'), button:has-text('Next')");
+            if (submitButton == null) {
+                break;
+            }
+            String beforeStepUrl = page.url();
+            activity("Submitting application step " + step + " for: " + safe(job.jobTitle()));
             submitButton.click();
             page.waitForLoadState();
             human.pause();
+            if (externalRedirect(beforeStepUrl, page.url())) {
+                activity("External career site redirect detected for: " + safe(job.companyName()));
+                return result(job, ApplyStatus.EXTERNAL_REDIRECT, null, true, attempt);
+            }
         }
         activity("Application completed for: " + safe(job.jobTitle()) + " at " + safe(job.companyName()));
         return result(job, ApplyStatus.SUCCESS, null, false, attempt);
     }
 
     private AnswerOutcome answerQuestions(QuestionAnswerProvider answerProvider) {
-        Locator fields = page.locator("textarea, input[type='text'], input:not([type]), select");
+        Locator fields = page.locator("textarea, input[type='text'], input[type='number'], input[type='tel'], input:not([type]), select");
         int count = Math.min(fields.count(), 8);
         for (int i = 0; i < count; i++) {
             Locator field = fields.nth(i);
+            if (!visible(field)) {
+                continue;
+            }
             String question = inferQuestion(field);
             if (question.isBlank()) {
                 continue;
@@ -110,6 +128,23 @@ public class NaukriJobPage {
             }
         }
         return AnswerOutcome.COMPLETE;
+    }
+
+    private Locator firstVisible(String selector) {
+        Locator locator = page.locator(selector);
+        int count = Math.min(locator.count(), 10);
+        for (int i = 0; i < count; i++) {
+            Locator candidate = locator.nth(i);
+            if (visible(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private boolean applicationComplete() {
+        String body = page.locator("body").innerText();
+        return contains(body, "application sent", "successfully applied", "applied successfully", "application submitted");
     }
 
     private String inferQuestion(Locator field) {
@@ -151,6 +186,14 @@ public class NaukriJobPage {
             }
         }
         return false;
+    }
+
+    private boolean visible(Locator locator) {
+        try {
+            return locator.isVisible();
+        } catch (Exception exception) {
+            return false;
+        }
     }
 
     private JobApplicationResult result(DiscoveredJob job, ApplyStatus status, String reason, boolean redirect, int attempt) {

@@ -9,6 +9,7 @@ import {
   DashboardResponse,
   JobFilterResponse,
   NaukriCredentialsResponse,
+  PendingQuestion,
   QuestionAnswer
 } from './models';
 
@@ -42,6 +43,14 @@ export class ApiService {
 
   saveQuestion(payload: { question: string; answer: string }) {
     return this.http.post<QuestionAnswer>(`${environment.apiUrl}/questions`, payload);
+  }
+
+  pendingQuestion() {
+    return this.http.get<PendingQuestion | null>(`${environment.apiUrl}/questions/pending`);
+  }
+
+  answerPendingQuestion(id: string, payload: { answer: string }) {
+    return this.http.post<QuestionAnswer>(`${environment.apiUrl}/questions/pending/${id}/answer`, payload);
   }
 
   history() {

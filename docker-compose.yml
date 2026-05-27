@@ -27,6 +27,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-naukri_bot}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-naukri_bot}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      BOT_STORAGE_DIR: /app/storage
     ports:
       - "8080:8080"
     volumes:

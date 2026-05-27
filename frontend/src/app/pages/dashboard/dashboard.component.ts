@@ -7,6 +7,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ApiService } from '../../core/api.service';
 import { apiErrorMessage } from '../../core/api-error';
+import { downloadBlob } from '../../core/download';
 import { DashboardResponse } from '../../core/models';
 
 @Component({
@@ -97,12 +98,11 @@ export class DashboardComponent implements OnInit {
   download(format: 'csv' | 'xlsx'): void {
     this.api.exportReport(format).subscribe({
       next: (blob) => {
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = `applied-jobs.${format}`;
-        anchor.click();
-        URL.revokeObjectURL(url);
+        const mimeType = format === 'csv'
+          ? 'text/csv;charset=utf-8'
+          : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        downloadBlob(blob, `applied-jobs.${format}`, mimeType);
+        this.snack.open(`${format.toUpperCase()} export downloaded`, 'Close', { duration: 3000 });
       },
       error: (error) => this.snack.open(apiErrorMessage(error, 'Unable to export report'), 'Close', { duration: 5000 })
     });

@@ -35,9 +35,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -61,6 +63,7 @@ public class BotOrchestratorService {
     private final BotLogService botLogService;
     private final BotRuntimeState runtimeState;
     private final NotificationService notificationService;
+    private final PendingQuestionService pendingQuestionService;
 
     public BotCommandResponse start(User user) {
         String validationFailure = validateStartRequest(user);
@@ -107,6 +110,7 @@ public class BotOrchestratorService {
 
     public BotCommandResponse stop(User user) {
         runtimeState.stop(user.getId());
+        pendingQuestionService.cancel(user);
         botStatusService.set(user, BotRunStatus.STOPPED, false, false, false, "Stop requested");
         botLogService.warn(user, "Stop requested");
         return new BotCommandResponse("Stop requested", BotRunStatus.STOPPED);
@@ -142,7 +146,7 @@ public class BotOrchestratorService {
 
     public BotCommandResponse testApply(User user) {
         AutomationRunRequest request = request(user, true);
-        AutomationRunResult result = automationClient.run(request, question -> aiAnswerService.answerFor(user, question),
+        AutomationRunResult result = automationClient.run(request, question -> answerForQuestion(user, question),
                 new Control(user.getId()), activityListener(user));
         persistResult(user, jobFilterRepository.findByUser(user).orElseThrow(), result);
         if (result.isCaptchaDetected()) {
@@ -153,6 +157,7 @@ public class BotOrchestratorService {
             botStatusService.set(user, BotRunStatus.FAILED, false, false, false, result.getFailureReason());
             return new BotCommandResponse(result.getFailureReason(), BotRunStatus.FAILED);
         }
+        botStatusService.set(user, BotRunStatus.IDLE, false, false, false, "Test apply completed in dry-run mode");
         return new BotCommandResponse("Test apply completed in dry-run mode", BotRunStatus.IDLE);
     }
 
@@ -169,7 +174,7 @@ public class BotOrchestratorService {
             JobFilter filter = jobFilterRepository.findByUser(user)
                     .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, "Job filters are not configured"));
             AutomationRunResult result = automationClient.run(request(user, properties.bot().dryRun(), manualLoginOnCaptcha),
-                    question -> aiAnswerService.answerFor(automationUser, question),
+                    question -> answerForQuestion(automationUser, question),
                     new Control(user.getId()),
                     activityListener(automationUser));
             persistResult(user, filter, result);
@@ -234,6 +239,23 @@ public class BotOrchestratorService {
                 properties.bot().manualLoginTimeoutSeconds(),
                 new ProxySettings(properties.bot().proxyHost(), properties.bot().proxyPort(), properties.bot().proxyUsername(), properties.bot().proxyPassword()),
                 properties.bot().maxRetries());
+    }
+
+    private Optional<String> answerForQuestion(User user, String question) {
+        Optional<String> savedAnswer = aiAnswerService.answerFor(user, question);
+        if (savedAnswer.isPresent()) {
+            botLogService.info(user, "Auto-answered application question: " + question);
+            return savedAnswer;
+        }
+        String message = "Waiting for your answer to application question: " + question;
+        botStatusService.activity(user, message);
+        botLogService.warn(user, message);
+        int timeoutSeconds = Math.max(30, properties.bot().questionAnswerTimeoutSeconds());
+        Optional<String> answer = pendingQuestionService.waitForAnswer(user, question, Duration.ofSeconds(timeoutSeconds));
+        if (answer.isEmpty()) {
+            botLogService.warn(user, "No answer received before timeout for question: " + question);
+        }
+        return answer;
     }
 
     private void persistResult(User user, JobFilter filter, AutomationRunResult result) {

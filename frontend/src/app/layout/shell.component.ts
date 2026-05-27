@@ -1,11 +1,19 @@
-import { Component, inject } from '@angular/core';
+import { Component, DestroyRef, inject, OnInit } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
 import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { EMPTY, catchError, timer } from 'rxjs';
+import { ApiService } from '../core/api.service';
+import { apiErrorMessage } from '../core/api-error';
 import { AuthService } from '../core/auth.service';
+import { PendingQuestion } from '../core/models';
+import { PendingQuestionDialogComponent } from './pending-question-dialog.component';
 
 interface NavItem {
   label: string;
@@ -21,8 +29,10 @@ interface NavItem {
     RouterLink,
     RouterLinkActive,
     MatButtonModule,
+    MatDialogModule,
     MatIconModule,
     MatListModule,
+    MatSnackBarModule,
     MatSidenavModule,
     MatToolbarModule
   ],
@@ -102,8 +112,14 @@ interface NavItem {
     }
   `]
 })
-export class ShellComponent {
+export class ShellComponent implements OnInit {
   readonly auth = inject(AuthService);
+  private readonly api = inject(ApiService);
+  private readonly dialog = inject(MatDialog);
+  private readonly snack = inject(MatSnackBar);
+  private readonly destroyRef = inject(DestroyRef);
+  private activeQuestionId: string | null = null;
+
   readonly navItems: NavItem[] = [
     { label: 'Dashboard', icon: 'dashboard', route: '/dashboard' },
     { label: 'Credentials', icon: 'vpn_key', route: '/credentials' },
@@ -113,4 +129,51 @@ export class ShellComponent {
     { label: 'Bot Control', icon: 'smart_toy', route: '/control' },
     { label: 'Logs', icon: 'terminal', route: '/logs' }
   ];
+
+  ngOnInit(): void {
+    timer(0, 3000).pipe(
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe(() => this.checkPendingQuestion());
+  }
+
+  private checkPendingQuestion(): void {
+    this.api.pendingQuestion().pipe(
+      catchError(() => EMPTY)
+    ).subscribe((question) => {
+      if (!question) {
+        return;
+      }
+      this.openPendingQuestion(question);
+    });
+  }
+
+  private openPendingQuestion(question: PendingQuestion): void {
+    if (this.activeQuestionId === question.id) {
+      return;
+    }
+    this.activeQuestionId = question.id;
+    const dialogRef = this.dialog.open(PendingQuestionDialogComponent, {
+      data: question,
+      disableClose: true,
+      width: '560px'
+    });
+    dialogRef.afterClosed().pipe(
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe((answer) => {
+      if (!answer) {
+        this.activeQuestionId = null;
+        return;
+      }
+      this.api.answerPendingQuestion(question.id, { answer }).subscribe({
+        next: () => {
+          this.activeQuestionId = null;
+          this.snack.open('Answer saved. Automation is continuing.', 'Close', { duration: 4000 });
+        },
+        error: (error) => {
+          this.activeQuestionId = null;
+          this.snack.open(apiErrorMessage(error, 'Unable to submit answer'), 'Close', { duration: 5000 });
+        }
+      });
+    });
+  }
 }

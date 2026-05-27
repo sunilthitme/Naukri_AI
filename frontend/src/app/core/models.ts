@@ -82,3 +82,10 @@ export interface BotCommandResponse {
   message: string;
   status: string;
 }
+
+export interface PendingQuestion {
+  id: string;
+  question: string;
+  createdAt: string;
+  expiresAt: string;
+}

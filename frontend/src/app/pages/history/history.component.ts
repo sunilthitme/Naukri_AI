@@ -7,6 +7,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ApiService } from '../../core/api.service';
 import { apiErrorMessage } from '../../core/api-error';
+import { downloadBlob } from '../../core/download';
 import { AppliedJob } from '../../core/models';
 
 @Component({
@@ -17,9 +18,19 @@ import { AppliedJob } from '../../core/models';
     <section class="page">
       <div class="page-header">
         <h1 class="page-title">Applied Jobs History</h1>
-        <button mat-icon-button aria-label="Refresh history" (click)="load()">
-          <mat-icon>refresh</mat-icon>
-        </button>
+        <div class="actions">
+          <button mat-stroked-button (click)="download('csv')">
+            <mat-icon>download</mat-icon>
+            CSV
+          </button>
+          <button mat-stroked-button (click)="download('xlsx')">
+            <mat-icon>table_view</mat-icon>
+            Excel
+          </button>
+          <button mat-icon-button aria-label="Refresh history" (click)="load()">
+            <mat-icon>refresh</mat-icon>
+          </button>
+        </div>
       </div>
       <div class="table-wrap">
         <table mat-table [dataSource]="jobs()">
@@ -76,6 +87,19 @@ export class HistoryComponent implements OnInit {
     this.api.history().subscribe({
       next: (response) => this.jobs.set(response),
       error: (error) => this.snack.open(apiErrorMessage(error, 'Unable to load job history'), 'Close', { duration: 5000 })
+    });
+  }
+
+  download(format: 'csv' | 'xlsx'): void {
+    this.api.exportReport(format).subscribe({
+      next: (blob) => {
+        const mimeType = format === 'csv'
+          ? 'text/csv;charset=utf-8'
+          : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        downloadBlob(blob, `applied-jobs.${format}`, mimeType);
+        this.snack.open(`${format.toUpperCase()} export downloaded`, 'Close', { duration: 3000 });
+      },
+      error: (error) => this.snack.open(apiErrorMessage(error, 'Unable to export report'), 'Close', { duration: 5000 })
     });
   }
 }

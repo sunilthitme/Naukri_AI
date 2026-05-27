@@ -5,7 +5,8 @@
   },
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:8080" },
-    { "key": "token", "value": "" }
+    { "key": "token", "value": "" },
+    { "key": "pendingQuestionId", "value": "" }
   ],
   "item": [
     {
@@ -59,6 +60,26 @@
         ],
         "url": "{{baseUrl}}/api/questions",
         "body": { "mode": "raw", "raw": "{\"question\":\"What is your current CTC?\",\"answer\":\"25 LPA\"}" }
+      }
+    },
+    {
+      "name": "Get Pending Apply Question",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/api/questions/pending"
+      }
+    },
+    {
+      "name": "Answer Pending Apply Question",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/questions/pending/{{pendingQuestionId}}/answer",
+        "body": { "mode": "raw", "raw": "{\"answer\":\"25 LPA\"}" }
       }
     },
     {

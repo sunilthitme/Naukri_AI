@@ -24,4 +24,15 @@ public final class QuestionDtos {
 
     public record AnswerMatchResponse(boolean matched, String answer, double confidenceScore) {
     }
+
+    public record PendingQuestionResponse(
+            String id,
+            String question,
+            Instant createdAt,
+            Instant expiresAt
+    ) {
+    }
+
+    public record PendingQuestionAnswerRequest(@NotBlank String answer) {
+    }
 }

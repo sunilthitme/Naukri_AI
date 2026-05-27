@@ -18,9 +18,10 @@ app:
     admin-email: admin@example.com
     admin-password: ChangeMe123!
   bot:
-    storage-dir: storage
+    storage-dir: ../storage
     headless: true
     dry-run: true
     mock: true
     max-retries: 0
     manual-login-timeout-seconds: 120
+    question-answer-timeout-seconds: 120
