@@ -12,7 +12,7 @@ class EncryptionServiceTest {
         AppProperties properties = new AppProperties(
                 new AppProperties.Security("01234567890123456789012345678901", "01234567890123456789012345678901", 60),
                 new AppProperties.Bootstrap("", ""),
-                new AppProperties.Bot("target/test-storage", true, true, true, 0, "", null, "", ""),
+                new AppProperties.Bot("target/test-storage", true, true, true, 0, "", null, "", "", 600),
                 new AppProperties.Llm("", "", ""),
                 new AppProperties.Notifications("", "", "", ""));
         EncryptionService service = new EncryptionService(properties);

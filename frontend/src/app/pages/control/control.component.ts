@@ -42,6 +42,12 @@ import { BotStatus } from '../../core/models';
               <div>
                 <strong>{{ status()?.status === 'CAPTCHA_REQUIRED' ? 'Manual action required' : 'Failure reason' }}</strong>
                 <span>{{ failureMessage() }}</span>
+                @if (status()?.status === 'CAPTCHA_REQUIRED') {
+                  <button mat-flat-button color="primary" class="inline-action" (click)="command('manual-login')" [disabled]="commandRunning()">
+                    <mat-icon>open_in_new</mat-icon>
+                    Login Manually & Continue
+                  </button>
+                }
               </div>
             </div>
           }
@@ -59,6 +65,9 @@ import { BotStatus } from '../../core/models';
             <button mat-stroked-button color="warn" (click)="command('stop')" [disabled]="commandRunning()"><mat-icon>stop</mat-icon>Stop Bot</button>
             <button mat-stroked-button (click)="command('pause')" [disabled]="commandRunning()"><mat-icon>pause</mat-icon>Pause Bot</button>
             <button mat-stroked-button (click)="command('resume')" [disabled]="commandRunning()"><mat-icon>resume</mat-icon>Resume Bot</button>
+            @if (status()?.status === 'CAPTCHA_REQUIRED') {
+              <button mat-flat-button color="accent" (click)="command('manual-login')" [disabled]="commandRunning()"><mat-icon>open_in_new</mat-icon>Login Manually</button>
+            }
             <button mat-stroked-button (click)="command('test-login')" [disabled]="commandRunning()"><mat-icon>verified_user</mat-icon>Test Login</button>
             <button mat-stroked-button (click)="command('test-apply')" [disabled]="commandRunning()"><mat-icon>fact_check</mat-icon>Test Apply</button>
           </div>
@@ -89,6 +98,10 @@ import { BotStatus } from '../../core/models';
     .status-alert div {
       display: grid;
       gap: 4px;
+    }
+    .inline-action {
+      width: fit-content;
+      margin-top: 8px;
     }
   `]
 })
@@ -126,7 +139,7 @@ export class ControlComponent implements OnInit {
     ).subscribe((response) => this.status.set(response));
   }
 
-  command(command: 'start' | 'stop' | 'pause' | 'resume' | 'test-login' | 'test-apply'): void {
+  command(command: 'start' | 'stop' | 'pause' | 'resume' | 'manual-login' | 'test-login' | 'test-apply'): void {
     this.commandError.set(null);
     this.commandRunning.set(true);
     this.api.botCommand(command).pipe(

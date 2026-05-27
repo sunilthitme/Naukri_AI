@@ -70,6 +70,14 @@
       }
     },
     {
+      "name": "Login Manually And Continue",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/api/bot/manual-login"
+      }
+    },
+    {
       "name": "Stop Bot",
       "request": {
         "method": "POST",

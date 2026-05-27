@@ -56,7 +56,7 @@ export class ApiService {
     return this.http.get<BotStatus>(`${environment.apiUrl}/bot/status`);
   }
 
-  botCommand(command: 'start' | 'stop' | 'pause' | 'resume' | 'test-login' | 'test-apply') {
+  botCommand(command: 'start' | 'stop' | 'pause' | 'resume' | 'manual-login' | 'test-login' | 'test-apply') {
     return this.http.post<BotCommandResponse>(`${environment.apiUrl}/bot/${command}`, {});
   }
 

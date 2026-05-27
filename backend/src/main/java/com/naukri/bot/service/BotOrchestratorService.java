@@ -83,6 +83,28 @@ public class BotOrchestratorService {
         return new BotCommandResponse("Bot started", BotRunStatus.RUNNING);
     }
 
+    public BotCommandResponse manualLoginAndContinue(User user) {
+        String validationFailure = validateStartRequest(user);
+        if (validationFailure != null) {
+            botStatusService.set(user, BotRunStatus.FAILED, false, false, false, validationFailure);
+            botLogService.error(user, validationFailure);
+            return new BotCommandResponse(validationFailure, BotRunStatus.FAILED);
+        }
+        String message = "Opening visible Naukri browser for manual login. Complete captcha/login there; automation will continue automatically.";
+        botStatusService.set(user, BotRunStatus.RUNNING, true, false, false, message);
+        botLogService.info(user, message);
+        runtimeState.start(user.getId());
+        try {
+            botTaskExecutor.execute(() -> runAutomation(user.getId(), true));
+        } catch (Exception exception) {
+            String failure = "Unable to queue manual login recovery: " + friendlyMessage(exception);
+            botStatusService.set(user, BotRunStatus.FAILED, false, false, false, failure);
+            botLogService.error(user, failure);
+            return new BotCommandResponse(failure, BotRunStatus.FAILED);
+        }
+        return new BotCommandResponse(message, BotRunStatus.RUNNING);
+    }
+
     public BotCommandResponse stop(User user) {
         runtimeState.stop(user.getId());
         botStatusService.set(user, BotRunStatus.STOPPED, false, false, false, "Stop requested");
@@ -135,6 +157,10 @@ public class BotOrchestratorService {
     }
 
     public void runAutomation(Long userId) {
+        runAutomation(userId, false);
+    }
+
+    public void runAutomation(Long userId, boolean manualLoginOnCaptcha) {
         User user = null;
         try {
             user = userRepository.findById(userId)
@@ -142,7 +168,7 @@ public class BotOrchestratorService {
             User automationUser = user;
             JobFilter filter = jobFilterRepository.findByUser(user)
                     .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, "Job filters are not configured"));
-            AutomationRunResult result = automationClient.run(request(user, properties.bot().dryRun()),
+            AutomationRunResult result = automationClient.run(request(user, properties.bot().dryRun(), manualLoginOnCaptcha),
                     question -> aiAnswerService.answerFor(automationUser, question),
                     new Control(user.getId()),
                     activityListener(automationUser));
@@ -181,6 +207,10 @@ public class BotOrchestratorService {
     }
 
     private AutomationRunRequest request(User user, boolean dryRun) {
+        return request(user, dryRun, false);
+    }
+
+    private AutomationRunRequest request(User user, boolean dryRun, boolean manualLoginOnCaptcha) {
         NaukriCredentials credentials = credentialsRepository.findByUser(user)
                 .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, "Naukri credentials are not configured"));
         JobFilter filter = jobFilterRepository.findByUser(user)
@@ -198,8 +228,10 @@ public class BotOrchestratorService {
                         filter.getDailyApplyLimit(), filter.isEasyApplyOnly(), filter.getDuplicatePreventionDays()),
                 resumes,
                 Path.of(properties.bot().storageDir()),
-                properties.bot().headless(),
+                manualLoginOnCaptcha ? false : properties.bot().headless(),
                 dryRun,
+                manualLoginOnCaptcha,
+                properties.bot().manualLoginTimeoutSeconds(),
                 new ProxySettings(properties.bot().proxyHost(), properties.bot().proxyPort(), properties.bot().proxyUsername(), properties.bot().proxyPassword()),
                 properties.bot().maxRetries());
     }

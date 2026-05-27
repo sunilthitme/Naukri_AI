@@ -44,6 +44,11 @@ public class BotController {
         return botOrchestratorService.resume(currentUserService.currentUser());
     }
 
+    @PostMapping("/manual-login")
+    public BotCommandResponse manualLogin() {
+        return botOrchestratorService.manualLoginAndContinue(currentUserService.currentUser());
+    }
+
     @PostMapping("/test-login")
     public BotCommandResponse testLogin() {
         return botOrchestratorService.testLogin(currentUserService.currentUser());

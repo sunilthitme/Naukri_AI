@@ -24,7 +24,8 @@ public record AppProperties(
                       String proxyHost,
                       Integer proxyPort,
                       String proxyUsername,
-                      String proxyPassword) {
+                      String proxyPassword,
+                      int manualLoginTimeoutSeconds) {
     }
 
     public record Llm(String baseUrl, String apiKey, String model) {

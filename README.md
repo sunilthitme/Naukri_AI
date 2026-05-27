@@ -30,6 +30,7 @@ Important variables:
 - `APP_BOOTSTRAP_ADMIN_EMAIL`, `APP_BOOTSTRAP_ADMIN_PASSWORD`
 - `BOT_DRY_RUN=true` for safe local testing
 - `BOT_MOCK=true` only for local smoke tests that should not contact Naukri
+- `BOT_MANUAL_LOGIN_TIMEOUT_SECONDS` for the manual captcha login window, default `600`
 - `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL` for compatible LLM scoring
 
 ## Run With Docker
@@ -110,6 +111,12 @@ npm.cmd test
 - Captcha is detected and pauses automation; this app does not bypass captcha.
 - Keep `BOT_DRY_RUN=true` until credentials, filters, and compliance approvals are validated.
 - Use `BOT_MOCK=true` only for automated local smoke tests; leave it false for real Playwright automation.
+
+## Manual Captcha Login Recovery
+
+When Naukri shows captcha, OTP, or a human verification page, the bot marks the run as `CAPTCHA_REQUIRED` and the Bot Control page shows `Login Manually & Continue`. Click it to open a visible Playwright browser on the backend machine, complete the Naukri login manually, and the automation will continue from the pending search/apply flow after login is detected.
+
+The manual wait time is controlled by `BOT_MANUAL_LOGIN_TIMEOUT_SECONDS`. The default is 10 minutes.
 
 ## API Collection
 

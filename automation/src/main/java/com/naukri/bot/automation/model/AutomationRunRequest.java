@@ -11,6 +11,8 @@ public record AutomationRunRequest(
         Path storageDirectory,
         boolean headless,
         boolean dryRun,
+        boolean manualLoginOnCaptcha,
+        int manualLoginTimeoutSeconds,
         ProxySettings proxy,
         int maxRetries
 ) {

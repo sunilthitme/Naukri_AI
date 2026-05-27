@@ -123,6 +123,32 @@ public class NaukriLoginPage {
         return classifyCurrentPage().status() == LoginStatus.CAPTCHA_DETECTED;
     }
 
+    public LoginTestResult waitForManualLogin(int timeoutSeconds) {
+        int safeTimeoutSeconds = Math.max(60, timeoutSeconds);
+        activity("Manual Naukri login required. Complete login/captcha in the visible browser window.");
+        long deadline = System.currentTimeMillis() + (safeTimeoutSeconds * 1000L);
+        long nextReminderAt = 0;
+        while (System.currentTimeMillis() < deadline) {
+            waitQuietly(2_000);
+            LoginTestResult result = classifyCurrentPage();
+            if (result.success()) {
+                activity("Manual Naukri login completed. Continuing automation.");
+                return result;
+            }
+            long now = System.currentTimeMillis();
+            if (now >= nextReminderAt) {
+                long remainingSeconds = Math.max(0, (deadline - now) / 1000L);
+                activity("Waiting for manual Naukri login. Time remaining: " + remainingSeconds + " seconds.");
+                nextReminderAt = now + 15_000;
+            }
+        }
+        return new LoginTestResult(false, LoginStatus.CAPTCHA_DETECTED,
+                "Manual Naukri login timed out. Click Login Manually & Continue and complete captcha/login within "
+                        + safeTimeoutSeconds + " seconds.",
+                page.url(),
+                null);
+    }
+
     private LoginTestResult classifyCurrentPage() {
         return classifier.classify(page.url(), bodyText(), passwordFieldVisible());
     }

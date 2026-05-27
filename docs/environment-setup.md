@@ -46,6 +46,14 @@ The Docker backend image includes Playwright dependencies. On a local Windows ma
 mvn -pl automation exec:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install chromium"
 ```
 
+## Manual Captcha Login
+
+Naukri captcha and OTP prompts must be completed by the user. When the bot reports `CAPTCHA_REQUIRED`, use the Bot Control page action `Login Manually & Continue`. The backend opens Chromium in visible mode and waits for login completion before continuing the pending automation run.
+
+```env
+BOT_MANUAL_LOGIN_TIMEOUT_SECONDS=600
+```
+
 ## Safe Automation Mode
 
 Keep dry run enabled until the account, filters, resume paths, proxy, and compliance review are complete:

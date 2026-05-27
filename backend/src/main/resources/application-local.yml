@@ -23,3 +23,4 @@ app:
     dry-run: true
     mock: true
     max-retries: 0
+    manual-login-timeout-seconds: 120

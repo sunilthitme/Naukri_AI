@@ -59,6 +59,12 @@ public class PlaywrightNaukriAutomationClient implements NaukriAutomationClient 
 
             NaukriLoginPage loginPage = new NaukriLoginPage(page, activityListener);
             LoginTestResult loginResult = loginPage.login(request.naukriEmail(), request.naukriPassword());
+            if (!loginResult.success()
+                    && request.manualLoginOnCaptcha()
+                    && manualLoginAllowed(loginResult.status())) {
+                activity(activityListener, "Switching to manual login recovery mode");
+                loginResult = loginPage.waitForManualLogin(request.manualLoginTimeoutSeconds());
+            }
             result.getMessages().add(loginResult.message());
             if (!loginResult.success()) {
                 LoginTestResult withScreenshot = loginResult.withScreenshot(screenshot(page, request.storageDirectory(), "naukri_login", 1));
@@ -128,7 +134,12 @@ public class PlaywrightNaukriAutomationClient implements NaukriAutomationClient 
                     .setViewportSize(1366, 768)
                     .setIgnoreHTTPSErrors(true));
             Page page = context.newPage();
-            LoginTestResult result = new NaukriLoginPage(page, activityListener).login(request.naukriEmail(), request.naukriPassword());
+            NaukriLoginPage loginPage = new NaukriLoginPage(page, activityListener);
+            LoginTestResult result = loginPage.login(request.naukriEmail(), request.naukriPassword());
+            if (!result.success() && request.manualLoginOnCaptcha() && manualLoginAllowed(result.status())) {
+                activity(activityListener, "Switching to manual login recovery mode");
+                result = loginPage.waitForManualLogin(request.manualLoginTimeoutSeconds());
+            }
             if (!result.success()) {
                 result = result.withScreenshot(screenshot(page, request.storageDirectory(), "naukri_login_test", 1));
             }
@@ -215,5 +226,12 @@ public class PlaywrightNaukriAutomationClient implements NaukriAutomationClient 
 
     private void activity(AutomationActivityListener activityListener, String message) {
         activityListener.onActivity(message);
+    }
+
+    private boolean manualLoginAllowed(LoginStatus status) {
+        return status == LoginStatus.CAPTCHA_DETECTED
+                || status == LoginStatus.OTP_REQUIRED
+                || status == LoginStatus.LOGIN_FORM_NOT_FOUND
+                || status == LoginStatus.STILL_ON_LOGIN_PAGE;
     }
 }

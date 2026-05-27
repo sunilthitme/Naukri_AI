@@ -19,6 +19,7 @@ Base path: `/api`
 | GET | `/questions/match?question=` | Test fuzzy answer match |
 | GET | `/bot/status` | Current bot state |
 | POST | `/bot/start` | Start automation |
+| POST | `/bot/manual-login` | Open visible browser for manual captcha login, then continue automation |
 | POST | `/bot/stop` | Stop automation |
 | POST | `/bot/pause` | Pause automation |
 | POST | `/bot/resume` | Resume automation |
