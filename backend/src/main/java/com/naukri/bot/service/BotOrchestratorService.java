@@ -1,6 +1,7 @@
 package com.naukri.bot.service;
 
 import com.naukri.bot.automation.AutomationControl;
+import com.naukri.bot.automation.AutomationActivityListener;
 import com.naukri.bot.automation.NaukriAutomationClient;
 import com.naukri.bot.automation.model.AutomationJobFilter;
 import com.naukri.bot.automation.model.AutomationRunRequest;
@@ -104,7 +105,7 @@ public class BotOrchestratorService {
     }
 
     public BotCommandResponse testLogin(User user) {
-        LoginTestResult result = automationClient.testLogin(request(user, true));
+        LoginTestResult result = automationClient.testLogin(request(user, true), activityListener(user));
         if (result.success()) {
             botStatusService.set(user, BotRunStatus.IDLE, false, false, false, result.message());
             botLogService.info(user, result.message());
@@ -119,7 +120,8 @@ public class BotOrchestratorService {
 
     public BotCommandResponse testApply(User user) {
         AutomationRunRequest request = request(user, true);
-        AutomationRunResult result = automationClient.run(request, question -> aiAnswerService.answerFor(user, question), new Control(user.getId()));
+        AutomationRunResult result = automationClient.run(request, question -> aiAnswerService.answerFor(user, question),
+                new Control(user.getId()), activityListener(user));
         persistResult(user, jobFilterRepository.findByUser(user).orElseThrow(), result);
         if (result.isCaptchaDetected()) {
             botStatusService.set(user, BotRunStatus.CAPTCHA_REQUIRED, false, true, true, "Captcha detected. Manual login required.");
@@ -141,7 +143,9 @@ public class BotOrchestratorService {
             JobFilter filter = jobFilterRepository.findByUser(user)
                     .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, "Job filters are not configured"));
             AutomationRunResult result = automationClient.run(request(user, properties.bot().dryRun()),
-                    question -> aiAnswerService.answerFor(automationUser, question), new Control(user.getId()));
+                    question -> aiAnswerService.answerFor(automationUser, question),
+                    new Control(user.getId()),
+                    activityListener(automationUser));
             persistResult(user, filter, result);
             if (result.isCaptchaDetected()) {
                 botStatusService.set(user, BotRunStatus.CAPTCHA_REQUIRED, false, true, true, "Captcha detected. Manual login required.");
@@ -252,6 +256,20 @@ public class BotOrchestratorService {
 
     private String failureMessage(String message) {
         return message == null || message.isBlank() ? "Automation failed. Check logs for details." : message;
+    }
+
+    private AutomationActivityListener activityListener(User user) {
+        return message -> {
+            if (message == null || message.isBlank()) {
+                return;
+            }
+            try {
+                botStatusService.activity(user, message);
+                botLogService.info(user, "Activity: " + message);
+            } catch (Exception exception) {
+                log.warn("Unable to save automation activity", exception);
+            }
+        };
     }
 
     private String friendlyMessage(Exception exception) {

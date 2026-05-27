@@ -32,6 +32,19 @@ public class BotStatusService {
         return botStatusRepository.save(botStatus);
     }
 
+    @Transactional
+    public BotStatus activity(User user, String message) {
+        BotStatus botStatus = botStatusRepository.findByUser(user).orElseGet(BotStatus::new);
+        botStatus.setUser(user);
+        if (botStatus.getStatus() == null || botStatus.getStatus() == BotRunStatus.IDLE) {
+            botStatus.setStatus(BotRunStatus.RUNNING);
+            botStatus.setRunning(true);
+        }
+        botStatus.setMessage(message);
+        botStatus.setUpdatedAt(Instant.now());
+        return botStatusRepository.save(botStatus);
+    }
+
     public BotStatus get(User user) {
         return botStatusRepository.findByUser(user).orElseGet(() -> {
             BotStatus status = new BotStatus();

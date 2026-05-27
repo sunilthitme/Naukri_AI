@@ -27,6 +27,15 @@ import { BotStatus } from '../../core/models';
         </mat-card-header>
         <mat-card-content>
           <p class="muted">Updated: {{ status()?.updatedAt ? (status()?.updatedAt | date:'medium') : '-' }}</p>
+          @if (currentActivity()) {
+            <div class="status-alert info">
+              <mat-icon>pending_actions</mat-icon>
+              <div>
+                <strong>Current activity</strong>
+                <span>{{ currentActivity() }}</span>
+              </div>
+            </div>
+          }
           @if (failureMessage()) {
             <div class="status-alert error">
               <mat-icon>error</mat-icon>
@@ -72,6 +81,11 @@ import { BotStatus } from '../../core/models';
       color: #8a1f11;
       border: 1px solid #ffc9c2;
     }
+    .status-alert.info {
+      background: #eef6ff;
+      color: #0b4f8a;
+      border: 1px solid #b8dafc;
+    }
     .status-alert div {
       display: grid;
       gap: 4px;
@@ -85,6 +99,13 @@ export class ControlComponent implements OnInit {
   readonly status = signal<BotStatus | null>(null);
   readonly commandError = signal<string | null>(null);
   readonly commandRunning = signal(false);
+  readonly currentActivity = computed(() => {
+    const current = this.status();
+    if (!current || current.status !== 'RUNNING') {
+      return null;
+    }
+    return current.message || 'Starting automation...';
+  });
   readonly failureMessage = computed(() => {
     const current = this.status();
     if (!current || (current.status !== 'FAILED' && current.status !== 'CAPTCHA_REQUIRED')) {

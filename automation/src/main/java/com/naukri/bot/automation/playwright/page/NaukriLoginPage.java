@@ -3,6 +3,7 @@ package com.naukri.bot.automation.playwright.page;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.options.WaitUntilState;
+import com.naukri.bot.automation.AutomationActivityListener;
 import com.naukri.bot.automation.model.LoginStatus;
 import com.naukri.bot.automation.model.LoginTestResult;
 import com.naukri.bot.automation.playwright.HumanBehavior;
@@ -64,14 +65,21 @@ public class NaukriLoginPage {
     };
 
     private final Page page;
+    private final AutomationActivityListener activityListener;
     private final HumanBehavior human = new HumanBehavior();
     private final NaukriLoginStatusClassifier classifier = new NaukriLoginStatusClassifier();
 
     public NaukriLoginPage(Page page) {
+        this(page, AutomationActivityListener.NOOP);
+    }
+
+    public NaukriLoginPage(Page page, AutomationActivityListener activityListener) {
         this.page = page;
+        this.activityListener = activityListener;
     }
 
     public LoginTestResult login(String email, String password) {
+        activity("Preparing Naukri login");
         LoginForm loginForm = openLoginForm();
         if (loginForm == null) {
             LoginTestResult blocked = classifyCurrentPage();
@@ -81,14 +89,18 @@ public class NaukriLoginPage {
             return new LoginTestResult(false, LoginStatus.LOGIN_FORM_NOT_FOUND,
                     "Naukri login form was not found on supported login pages. Current URL: " + page.url(), page.url(), null);
         }
+        activity("Entering Naukri email");
         human.type(loginForm.username(), email);
         human.pause();
+        activity("Entering Naukri password");
         human.type(loginForm.password(), password);
         human.pause();
         Locator loginButton = waitForVisible(LOGIN_BUTTON_SELECTORS, 5_000);
         if (loginButton == null) {
+            activity("Submitting Naukri login form with Enter key");
             loginForm.password().press("Enter");
         } else {
+            activity("Submitting Naukri login form");
             loginButton.click();
         }
         for (int i = 0; i < 20; i++) {
@@ -98,10 +110,13 @@ public class NaukriLoginPage {
                     || result.status() == LoginStatus.INVALID_CREDENTIALS
                     || result.status() == LoginStatus.CAPTCHA_DETECTED
                     || result.status() == LoginStatus.OTP_REQUIRED) {
+                activity(result.success() ? "Naukri login succeeded" : result.message());
                 return result;
             }
         }
-        return classifyCurrentPage();
+        LoginTestResult result = classifyCurrentPage();
+        activity(result.message());
+        return result;
     }
 
     public boolean captchaDetected() {
@@ -114,13 +129,16 @@ public class NaukriLoginPage {
 
     private LoginForm openLoginForm() {
         for (String loginUrl : LOGIN_URLS) {
+            activity("Loading Naukri login page: " + loginUrl);
             page.navigate(loginUrl,
                     new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED).setTimeout(45_000));
             human.pause();
+            activity("Looking for Naukri login form");
             LoginForm form = findLoginForm(12_000);
             if (form != null) {
                 return form;
             }
+            activity("Opening Naukri login popup if available");
             clickLoginEntryIfVisible();
             form = findLoginForm(8_000);
             if (form != null) {
@@ -208,6 +226,10 @@ public class NaukriLoginPage {
             page.waitForTimeout(milliseconds);
         } catch (Exception ignored) {
         }
+    }
+
+    private void activity(String message) {
+        activityListener.onActivity(message);
     }
 
     private record LoginForm(Locator username, Locator password) {

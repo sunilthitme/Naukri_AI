@@ -7,6 +7,7 @@ import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.options.Proxy;
 import com.naukri.bot.automation.AutomationControl;
+import com.naukri.bot.automation.AutomationActivityListener;
 import com.naukri.bot.automation.NaukriAutomationClient;
 import com.naukri.bot.automation.QuestionAnswerProvider;
 import com.naukri.bot.automation.model.ApplyStatus;
@@ -32,11 +33,16 @@ public class PlaywrightNaukriAutomationClient implements NaukriAutomationClient 
     private static final Logger log = LoggerFactory.getLogger(PlaywrightNaukriAutomationClient.class);
 
     @Override
-    public AutomationRunResult run(AutomationRunRequest request, QuestionAnswerProvider questionAnswerProvider, AutomationControl control) {
+    public AutomationRunResult run(AutomationRunRequest request,
+                                   QuestionAnswerProvider questionAnswerProvider,
+                                   AutomationControl control,
+                                   AutomationActivityListener activityListener) {
         AutomationRunResult result = new AutomationRunResult();
         try (Playwright playwright = Playwright.create()) {
+            activity(activityListener, "Starting Playwright browser");
             BrowserType.LaunchOptions launchOptions = new BrowserType.LaunchOptions().setHeadless(request.headless());
             if (request.proxy() != null && request.proxy().enabled()) {
+                activity(activityListener, "Configuring browser proxy");
                 Proxy proxy = new Proxy(request.proxy().server());
                 if (request.proxy().username() != null && !request.proxy().username().isBlank()) {
                     proxy.setUsername(request.proxy().username());
@@ -51,7 +57,7 @@ public class PlaywrightNaukriAutomationClient implements NaukriAutomationClient 
                     .setIgnoreHTTPSErrors(true));
             Page page = context.newPage();
 
-            NaukriLoginPage loginPage = new NaukriLoginPage(page);
+            NaukriLoginPage loginPage = new NaukriLoginPage(page, activityListener);
             LoginTestResult loginResult = loginPage.login(request.naukriEmail(), request.naukriPassword());
             result.getMessages().add(loginResult.message());
             if (!loginResult.success()) {
@@ -71,20 +77,24 @@ public class PlaywrightNaukriAutomationClient implements NaukriAutomationClient 
                 result.setCaptchaDetected(true);
                 result.getMessages().add("Captcha detected during login. Automation paused for manual action.");
                 result.finish();
+                context.close();
+                browser.close();
                 return result;
             }
 
-            NaukriSearchPage searchPage = new NaukriSearchPage(page);
+            NaukriSearchPage searchPage = new NaukriSearchPage(page, activityListener);
             List<DiscoveredJob> jobs = searchPage.search(request.filter(), request.filter().dailyApplyLimit());
             result.getMessages().add("Discovered " + jobs.size() + " jobs from search filters.");
 
             int processed = 0;
             for (DiscoveredJob job : jobs) {
                 if (control.shouldStop() || processed >= request.filter().dailyApplyLimit()) {
+                    activity(activityListener, "Stop requested or daily apply limit reached");
                     break;
                 }
+                activity(activityListener, "Preparing job " + (processed + 1) + " of " + jobs.size() + ": " + job.jobTitle());
                 control.waitIfPaused();
-                JobApplicationResult applicationResult = applyWithRetry(context, request, questionAnswerProvider, job);
+                JobApplicationResult applicationResult = applyWithRetry(context, request, questionAnswerProvider, job, activityListener);
                 result.getJobResults().add(applicationResult);
                 if (applicationResult.redirectedExternalSite()) {
                     result.getExternalRedirects().add(new ExternalRedirectResult(
@@ -99,30 +109,35 @@ public class PlaywrightNaukriAutomationClient implements NaukriAutomationClient 
             context.close();
             browser.close();
         } catch (Exception exception) {
+            activity(activityListener, "Automation failed: " + exception.getMessage());
             log.error("Automation failed", exception);
             result.getMessages().add(exception.getMessage());
         } finally {
+            activity(activityListener, "Automation run finished");
             result.finish();
         }
         return result;
     }
 
     @Override
-    public LoginTestResult testLogin(AutomationRunRequest request) {
+    public LoginTestResult testLogin(AutomationRunRequest request, AutomationActivityListener activityListener) {
         try (Playwright playwright = Playwright.create()) {
+            activity(activityListener, "Starting Playwright browser for login test");
             Browser browser = playwright.chromium().launch(launchOptions(request));
             BrowserContext context = browser.newContext(new Browser.NewContextOptions()
                     .setViewportSize(1366, 768)
                     .setIgnoreHTTPSErrors(true));
             Page page = context.newPage();
-            LoginTestResult result = new NaukriLoginPage(page).login(request.naukriEmail(), request.naukriPassword());
+            LoginTestResult result = new NaukriLoginPage(page, activityListener).login(request.naukriEmail(), request.naukriPassword());
             if (!result.success()) {
                 result = result.withScreenshot(screenshot(page, request.storageDirectory(), "naukri_login_test", 1));
             }
+            activity(activityListener, result.success() ? "Naukri login test succeeded" : result.message());
             context.close();
             browser.close();
             return result;
         } catch (Exception exception) {
+            activity(activityListener, "Naukri login test failed: " + exception.getMessage());
             log.error("Naukri login test failed", exception);
             return new LoginTestResult(false, LoginStatus.FAILED,
                     "Naukri login test failed: " + exception.getMessage(), null, null);
@@ -145,18 +160,20 @@ public class PlaywrightNaukriAutomationClient implements NaukriAutomationClient 
     private JobApplicationResult applyWithRetry(BrowserContext context,
                                                 AutomationRunRequest request,
                                                 QuestionAnswerProvider questionAnswerProvider,
-                                                DiscoveredJob job) {
+                                                DiscoveredJob job,
+                                                AutomationActivityListener activityListener) {
         int maxAttempts = Math.max(1, request.maxRetries() + 1);
         Exception lastFailure = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             Page jobPage = context.newPage();
             try {
-                NaukriJobPage naukriJobPage = new NaukriJobPage(jobPage);
+                NaukriJobPage naukriJobPage = new NaukriJobPage(jobPage, activityListener);
                 JobApplicationResult outcome = naukriJobPage.apply(job, request, questionAnswerProvider, attempt);
                 jobPage.close();
                 return outcome;
             } catch (Exception exception) {
                 lastFailure = exception;
+                activity(activityListener, "Job failed on attempt " + attempt + ": " + exception.getMessage());
                 String screenshot = screenshot(jobPage, request.storageDirectory(), job.companyName(), attempt);
                 jobPage.close();
                 if (attempt == maxAttempts) {
@@ -194,5 +211,9 @@ public class PlaywrightNaukriAutomationClient implements NaukriAutomationClient 
             log.warn("Unable to capture failure screenshot", screenshotFailure);
             return null;
         }
+    }
+
+    private void activity(AutomationActivityListener activityListener, String message) {
+        activityListener.onActivity(message);
     }
 }

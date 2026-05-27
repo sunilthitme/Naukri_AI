@@ -3,6 +3,7 @@ package com.naukri.bot.automation.playwright.page;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.options.WaitUntilState;
+import com.naukri.bot.automation.AutomationActivityListener;
 import com.naukri.bot.automation.model.AutomationJobFilter;
 import com.naukri.bot.automation.model.DiscoveredJob;
 import com.naukri.bot.automation.playwright.HumanBehavior;
@@ -14,24 +15,36 @@ import java.util.Locale;
 
 public class NaukriSearchPage {
     private final Page page;
+    private final AutomationActivityListener activityListener;
     private final HumanBehavior human = new HumanBehavior();
     private final NaukriUrlBuilder urlBuilder = new NaukriUrlBuilder();
 
     public NaukriSearchPage(Page page) {
+        this(page, AutomationActivityListener.NOOP);
+    }
+
+    public NaukriSearchPage(Page page, AutomationActivityListener activityListener) {
         this.page = page;
+        this.activityListener = activityListener;
     }
 
     public List<DiscoveredJob> search(AutomationJobFilter filter, int limit) {
-        page.navigate(urlBuilder.searchUrl(filter),
+        String searchUrl = urlBuilder.searchUrl(filter);
+        activity("Opening Naukri job search for: " + safe(filter.keywords()));
+        page.navigate(searchUrl,
                 new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED));
+        activity("Waiting for Naukri search results to load");
         page.waitForLoadState();
         List<DiscoveredJob> jobs = new ArrayList<>();
         int scrolls = 0;
         while (jobs.size() < limit && scrolls < 8) {
+            activity("Scanning visible job cards. Found " + jobs.size() + " so far");
             collectVisibleJobs(filter, jobs, limit);
+            activity("Scrolling Naukri results page");
             human.scroll(page);
             scrolls++;
         }
+        activity("Naukri search completed. Found " + jobs.size() + " candidate jobs");
         return jobs;
     }
 
@@ -52,6 +65,7 @@ public class NaukriSearchPage {
             String company = safeText(card.locator(".comp-name, .companyName, .subTitle").first());
             if (jobs.stream().noneMatch(job -> job.jobUrl().equals(url))) {
                 jobs.add(new DiscoveredJob(company, title, absolute(url), "N/A", "N/A", filter.location(), text));
+                activity("Discovered job: " + safe(title) + " at " + safe(company));
             }
         }
     }
@@ -94,5 +108,13 @@ public class NaukriSearchPage {
             return url;
         }
         return "https://www.naukri.com" + (url.startsWith("/") ? url : "/" + url);
+    }
+
+    private String safe(String value) {
+        return value == null || value.isBlank() ? "N/A" : value;
+    }
+
+    private void activity(String message) {
+        activityListener.onActivity(message);
     }
 }
