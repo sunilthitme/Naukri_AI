@@ -11,11 +11,23 @@ import com.naukri.bot.automation.model.DiscoveredJob;
 import com.naukri.bot.automation.model.JobApplicationResult;
 import com.naukri.bot.automation.playwright.HumanBehavior;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Locale;
 
 public class NaukriJobPage {
     private static final int MAX_APPLY_STEPS = 6;
+    private static final String APPLICATION_CONTAINER_SELECTORS = "[role='dialog'], [class*='modal'], [class*='Modal'], "
+            + "[class*='chatbot'], [class*='Chatbot'], [id*='chatbot'], [id*='Chatbot'], "
+            + "[class*='chatBot'], [id*='chatBot']";
+    private static final String SCOPED_NEXT_STEP_SELECTORS = "button:has-text('Submit'), button:has-text('Send'), "
+            + "button:has-text('Continue'), button:has-text('Next'), button:has-text('Save'), "
+            + "button:has-text('Done'), button:has-text('OK'), button:has-text('Proceed'), "
+            + "button:has-text('Submit application'), button:has-text('Save and continue')";
+    private static final String GLOBAL_NEXT_STEP_SELECTORS = "button:has-text('Submit'), button:has-text('Send'), "
+            + "button:has-text('Continue'), button:has-text('Next'), button:has-text('Proceed'), "
+            + "button:has-text('Submit application'), button:has-text('Save and continue')";
 
     private final Page page;
     private final AutomationActivityListener activityListener;
@@ -46,7 +58,7 @@ public class NaukriJobPage {
         }
         activity("Checking application state for: " + safe(job.jobTitle()));
         String body = page.locator("body").innerText();
-        if (contains(body, "already applied", "application sent")) {
+        if (contains(body, "already applied", "application sent") || appliedStateVisible()) {
             activity("Already applied: " + safe(job.jobTitle()) + " at " + safe(job.companyName()));
             return result(job, ApplyStatus.ALREADY_APPLIED, null, false, attempt);
         }
@@ -59,7 +71,7 @@ public class NaukriJobPage {
         Locator applyButton = findApplyButton(request);
         if (applyButton == null) {
             activity("Apply button not found for: " + safe(job.jobTitle()));
-            return result(job, ApplyStatus.FAILED, "Apply button not found", false, attempt);
+            return failedResult(job, request, "Apply button not found", attempt);
         }
 
         String beforeUrl = page.url();
@@ -67,6 +79,7 @@ public class NaukriJobPage {
         applyButton.click();
         page.waitForLoadState();
         human.pause();
+        waitForApplyResponse();
         if (externalRedirect(beforeUrl, page.url())) {
             activity("External career site redirect detected for: " + safe(job.companyName()));
             return result(job, ApplyStatus.EXTERNAL_REDIRECT, null, true, attempt);
@@ -83,8 +96,7 @@ public class NaukriJobPage {
                 activity("Application success detected for: " + safe(job.jobTitle()));
                 return result(job, ApplyStatus.SUCCESS, null, false, attempt);
             }
-            Locator submitButton = firstVisible("button:has-text('Submit'), button:has-text('Send'), button:has-text('Apply'), "
-                    + "button:has-text('Continue'), button:has-text('Next')");
+            Locator submitButton = findNextStepButton();
             if (submitButton == null) {
                 break;
             }
@@ -93,6 +105,7 @@ public class NaukriJobPage {
             submitButton.click();
             page.waitForLoadState();
             human.pause();
+            waitForApplyResponse();
             if (externalRedirect(beforeStepUrl, page.url())) {
                 activity("External career site redirect detected for: " + safe(job.companyName()));
                 return result(job, ApplyStatus.EXTERNAL_REDIRECT, null, true, attempt);
@@ -103,7 +116,7 @@ public class NaukriJobPage {
             return result(job, ApplyStatus.SUCCESS, null, false, attempt);
         }
         activity("Application completion was not confirmed for: " + safe(job.jobTitle()));
-        return result(job, ApplyStatus.FAILED, "Application completion was not confirmed after clicking apply", false, attempt);
+        return failedResult(job, request, "Application completion was not confirmed after clicking apply", attempt);
     }
 
     private Locator findApplyButton(AutomationRunRequest request) {
@@ -199,7 +212,90 @@ public class NaukriJobPage {
 
     private boolean applicationComplete() {
         String body = page.locator("body").innerText();
-        return contains(body, "application sent", "successfully applied", "applied successfully", "application submitted");
+        return contains(body,
+                "application sent",
+                "successfully applied",
+                "applied successfully",
+                "application submitted",
+                "you have successfully applied",
+                "your application has been sent")
+                || appliedStateVisible();
+    }
+
+    private void waitForApplyResponse() {
+        for (int i = 0; i < 12; i++) {
+            if (captchaDetected() || applicationComplete() || hasQuestionFields() || findNextStepButton() != null) {
+                return;
+            }
+            page.waitForTimeout(750);
+        }
+    }
+
+    private Locator findNextStepButton() {
+        Locator scoped = firstVisibleInContainers(APPLICATION_CONTAINER_SELECTORS, SCOPED_NEXT_STEP_SELECTORS);
+        if (scoped != null) {
+            return scoped;
+        }
+        return firstVisible(GLOBAL_NEXT_STEP_SELECTORS);
+    }
+
+    private Locator firstVisibleInContainers(String containerSelector, String childSelector) {
+        try {
+            Locator containers = page.locator(containerSelector);
+            int containerCount = Math.min(containers.count(), 12);
+            for (int i = 0; i < containerCount; i++) {
+                Locator container = containers.nth(i);
+                if (!visible(container)) {
+                    continue;
+                }
+                Locator buttons = container.locator(childSelector);
+                int buttonCount = Math.min(buttons.count(), 10);
+                for (int j = 0; j < buttonCount; j++) {
+                    Locator button = buttons.nth(j);
+                    if (visible(button) && enabled(button)) {
+                        return button;
+                    }
+                }
+            }
+            return null;
+        } catch (Exception exception) {
+            return null;
+        }
+    }
+
+    private boolean hasQuestionFields() {
+        try {
+            Locator fields = page.locator("textarea, input[type='text'], input[type='number'], input[type='tel'], input:not([type]), select");
+            int count = Math.min(fields.count(), 8);
+            for (int i = 0; i < count; i++) {
+                if (visible(fields.nth(i))) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Exception exception) {
+            return false;
+        }
+    }
+
+    private boolean appliedStateVisible() {
+        try {
+            Locator locator = page.locator("button:has-text('Applied'), [role='button']:has-text('Applied')");
+            int count = Math.min(locator.count(), 10);
+            for (int i = 0; i < count; i++) {
+                Locator candidate = locator.nth(i);
+                if (!visible(candidate)) {
+                    continue;
+                }
+                String normalized = safeText(candidate).toLowerCase(Locale.ROOT).trim();
+                if (normalized.equals("applied") || normalized.contains("already applied")) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Exception exception) {
+            return false;
+        }
     }
 
     private String inferQuestion(Locator field) {
@@ -293,8 +389,34 @@ public class NaukriJobPage {
     }
 
     private JobApplicationResult result(DiscoveredJob job, ApplyStatus status, String reason, boolean redirect, int attempt) {
+        return result(job, status, reason, redirect, null, attempt);
+    }
+
+    private JobApplicationResult failedResult(DiscoveredJob job, AutomationRunRequest request, String reason, int attempt) {
+        String screenshotPath = screenshot(request.storageDirectory(), job.companyName(), attempt);
+        if (screenshotPath != null) {
+            activity("Failure screenshot saved: " + screenshotPath);
+        }
+        return result(job, ApplyStatus.FAILED, reason, false, screenshotPath, attempt);
+    }
+
+    private JobApplicationResult result(DiscoveredJob job, ApplyStatus status, String reason, boolean redirect,
+                                        String screenshotPath, int attempt) {
         return new JobApplicationResult(job.companyName(), job.jobTitle(), Instant.now(), status, page.url(),
-                job.experience(), job.salary(), job.location(), redirect, reason, null, 0.0, attempt);
+                job.experience(), job.salary(), job.location(), redirect, reason, screenshotPath, 0.0, attempt);
+    }
+
+    private String screenshot(Path storageDirectory, String companyName, int attempt) {
+        try {
+            Path directory = storageDirectory.resolve("screenshots");
+            Files.createDirectories(directory);
+            String cleanName = companyName == null ? "job" : companyName.replaceAll("[^a-zA-Z0-9._-]", "_");
+            Path target = directory.resolve(cleanName + "_apply_" + attempt + "_" + System.currentTimeMillis() + ".png");
+            page.screenshot(new Page.ScreenshotOptions().setPath(target).setFullPage(true));
+            return target.toString();
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private String safe(String value) {

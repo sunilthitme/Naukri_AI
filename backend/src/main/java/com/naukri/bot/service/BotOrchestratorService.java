@@ -301,8 +301,12 @@ public class BotOrchestratorService {
 
     private boolean isDuplicate(User user, JobFilter filter, JobApplicationResult jobResult) {
         Instant after = Instant.now().minus(filter.getDuplicatePreventionDays(), ChronoUnit.DAYS);
-        return appliedJobRepository.existsByUserAndCompanyNameIgnoreCaseAndJobTitleIgnoreCaseAndApplyDateTimeAfter(
-                user, defaultText(jobResult.companyName(), "Unknown Company"), defaultText(jobResult.jobTitle(), "Unknown Job"), after);
+        return appliedJobRepository.existsByUserAndCompanyNameIgnoreCaseAndJobTitleIgnoreCaseAndStatusInAndApplyDateTimeAfter(
+                user,
+                defaultText(jobResult.companyName(), "Unknown Company"),
+                defaultText(jobResult.jobTitle(), "Unknown Job"),
+                List.of(ApplyStatus.SUCCESS, ApplyStatus.ALREADY_APPLIED),
+                after);
     }
 
     private String defaultText(String value, String fallback) {

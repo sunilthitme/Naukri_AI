@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 
 public interface AppliedJobRepository extends JpaRepository<AppliedJob, Long> {
@@ -20,6 +21,9 @@ public interface AppliedJobRepository extends JpaRepository<AppliedJob, Long> {
     long countByUserAndApplyDateTimeBetween(User user, Instant start, Instant end);
 
     boolean existsByUserAndCompanyNameIgnoreCaseAndJobTitleIgnoreCaseAndApplyDateTimeAfter(User user, String companyName, String jobTitle, Instant after);
+
+    boolean existsByUserAndCompanyNameIgnoreCaseAndJobTitleIgnoreCaseAndStatusInAndApplyDateTimeAfter(
+            User user, String companyName, String jobTitle, Collection<ApplyStatus> statuses, Instant after);
 
     @Query("select a from AppliedJob a where a.user = :user and a.applyDateTime between :start and :end order by a.applyDateTime desc")
     List<AppliedJob> findForDateRange(User user, Instant start, Instant end);
