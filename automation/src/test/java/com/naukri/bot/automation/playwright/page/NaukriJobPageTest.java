@@ -163,6 +163,81 @@ class NaukriJobPageTest {
         }
     }
 
+    @Test
+    void submitsNaukriDrawerAfterCheckboxChoice() {
+        try (Playwright playwright = Playwright.create();
+             Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true))) {
+            Page page = browser.newPage();
+            NaukriJobPage jobPage = new NaukriJobPage(page);
+            AtomicReference<String> askedQuestion = new AtomicReference<>();
+
+            JobApplicationResult result = jobPage.apply(
+                    new DiscoveredJob("Example Co", "Java Developer", dataUrl("""
+                            <!doctype html>
+                            <html>
+                              <body>
+                                <button onclick="document.body.insertAdjacentHTML('beforeend', `
+                                  <section class='ssrc__drawer'>
+                                    <p>Please select the city you are currently residing or willing to relocate to</p>
+                                    <div class='ssrc__checkbox-list'>
+                                      <div class='ssrc__checkbox-wrap'><input id='bengaluru' type='checkbox' value='Bengaluru'><span>Bengaluru</span></div>
+                                      <div class='ssrc__checkbox-wrap'><input id='chennai' type='checkbox' value='Chennai'><span>Chennai</span></div>
+                                      <div class='ssrc__checkbox-wrap'><input id='pune' type='checkbox' value='Pune'
+                                        onclick=&quot;document.getElementById('answer').textContent='Pune'; setTimeout(() => document.getElementById('save').disabled = false, 400)&quot;><span>Pune</span></div>
+                                    </div>
+                                    <span id='answer'></span>
+                                    <footer><button id='save' disabled onclick=&quot;if (document.getElementById('answer').textContent) document.body.innerHTML='Application sent'&quot;>Save</button></footer>
+                                  </section>`)">Apply</button>
+                              </body>
+                            </html>
+                            """), "3-5 years", "Not disclosed", "Pune", ""),
+                    request(),
+                    question -> {
+                        askedQuestion.set(question);
+                        return Optional.of("Pune");
+                    },
+                    1);
+
+            assertEquals(ApplyStatus.SUCCESS, result.status());
+            assertTrue(askedQuestion.get().contains("city"));
+        }
+    }
+
+    @Test
+    void customNaukriRadioRowsNeedUserAnswerWhenUnknown() {
+        try (Playwright playwright = Playwright.create();
+             Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true))) {
+            Page page = browser.newPage();
+            NaukriJobPage jobPage = new NaukriJobPage(page);
+            AtomicReference<String> askedQuestion = new AtomicReference<>();
+
+            JobApplicationResult result = jobPage.apply(
+                    new DiscoveredJob("Example Co", "Java Developer", dataUrl("""
+                            <!doctype html>
+                            <html>
+                              <body>
+                                <button onclick="document.body.insertAdjacentHTML('beforeend', `
+                                  <section class='ssrc__drawer'>
+                                    <p>Availability to attend virtual interview if scheduled on either 21 May or 22 May</p>
+                                    <div class='ssrc__option'><span>Yes</span></div>
+                                    <div class='ssrc__option'><span>No</span></div>
+                                    <footer><button disabled>Save</button></footer>
+                                  </section>`)">Apply</button>
+                              </body>
+                            </html>
+                            """), "3-5 years", "Not disclosed", "Pune", ""),
+                    request(),
+                    question -> {
+                        askedQuestion.set(question);
+                        return Optional.empty();
+                    },
+                    1);
+
+            assertEquals(ApplyStatus.QUESTION_NEEDS_ANSWER, result.status());
+            assertTrue(askedQuestion.get().contains("virtual interview"));
+        }
+    }
+
     private AutomationRunRequest request() {
         return new AutomationRunRequest(
                 "candidate@example.com",

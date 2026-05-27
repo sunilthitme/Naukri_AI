@@ -23,9 +23,12 @@ public class NaukriJobPage {
     private static final int MAX_APPLY_STEPS = 6;
     private static final String APPLICATION_CONTAINER_SELECTORS = "[role='dialog'], [class*='modal'], [class*='Modal'], "
             + "[class*='chatbot'], [class*='Chatbot'], [id*='chatbot'], [id*='Chatbot'], "
-            + "[class*='chatBot'], [id*='chatBot']";
+            + "[class*='chatBot'], [id*='chatBot'], [class*='drawer'], [class*='Drawer'], "
+            + "[class*='ssrc__drawer'], [id*='ssrc']";
     private static final String SCOPED_NEXT_STEP_SELECTORS = "button:has-text('Submit'), button:has-text('Send'), "
             + "button:has-text('Continue'), button:has-text('Next'), button:has-text('Save'), "
+            + "[role='button']:has-text('Save'), [class*='btn']:has-text('Save'), [class*='Btn']:has-text('Save'), "
+            + "[class*='button']:has-text('Save'), [class*='Button']:has-text('Save'), "
             + "button:has-text('Done'), button:has-text('OK'), button:has-text('Proceed'), "
             + "button:has-text('Submit application'), button:has-text('Save and continue')";
     private static final String GLOBAL_NEXT_STEP_SELECTORS = "button:has-text('Submit'), button:has-text('Send'), "
@@ -33,7 +36,10 @@ public class NaukriJobPage {
             + "button:has-text('Submit application'), button:has-text('Save and continue')";
     private static final String QUESTION_FIELD_SELECTORS = "textarea, input[type='text'], input[type='number'], "
             + "input[type='tel'], input:not([type]), [contenteditable='true'], select";
-    private static final String CHOICE_CONTROL_SELECTORS = "input[type='radio'], input[type='checkbox'], button, [role='button']";
+    private static final String CHOICE_CONTROL_SELECTORS = "input[type='radio'], input[type='checkbox'], "
+            + "[role='radio'], [role='checkbox'], label, "
+            + "[class*='radio'], [class*='Radio'], [class*='checkbox'], [class*='Checkbox'], "
+            + "[class*='option'], [class*='Option'], button, [role='button']";
 
     private final Page page;
     private final AutomationActivityListener activityListener;
@@ -102,7 +108,7 @@ public class NaukriJobPage {
                 activity("Application success detected for: " + safe(job.jobTitle()));
                 return result(job, ApplyStatus.SUCCESS, null, false, attempt);
             }
-            Locator submitButton = findNextStepButton();
+            Locator submitButton = waitForNextStepButton();
             if (submitButton == null) {
                 break;
             }
@@ -203,14 +209,14 @@ public class NaukriJobPage {
     private AnswerOutcome answerChoiceQuestions(QuestionAnswerProvider answerProvider) {
         Locator container = firstApplicationContainerWith(CHOICE_CONTROL_SELECTORS);
         if (container == null) {
-            return AnswerOutcome.COMPLETE;
+            container = page.locator("body");
         }
-        Locator choices = container.locator("input[type='radio'], input[type='checkbox'], button, [role='button']");
+        Locator choices = container.locator(CHOICE_CONTROL_SELECTORS);
         int count = Math.min(choices.count(), 16);
         Set<String> processed = new HashSet<>();
         for (int i = 0; i < count; i++) {
             Locator choice = choices.nth(i);
-            if (!enabled(choice) || isAlreadySelected(choice)) {
+            if (!isChoiceOptionCandidate(choice) || !enabled(choice) || isAlreadySelected(choice)) {
                 continue;
             }
             String optionText = choiceText(choice);
@@ -298,6 +304,17 @@ public class NaukriJobPage {
         return firstVisible(GLOBAL_NEXT_STEP_SELECTORS);
     }
 
+    private Locator waitForNextStepButton() {
+        for (int i = 0; i < 12; i++) {
+            Locator button = findNextStepButton();
+            if (button != null) {
+                return button;
+            }
+            page.waitForTimeout(500);
+        }
+        return null;
+    }
+
     private Locator questionScopedLocator(String selector) {
         Locator container = firstApplicationContainerWith(selector);
         return container == null ? page.locator(selector) : container.locator(selector);
@@ -333,8 +350,8 @@ public class NaukriJobPage {
                 int buttonCount = Math.min(buttons.count(), 10);
                 for (int j = 0; j < buttonCount; j++) {
                     Locator button = buttons.nth(j);
-                    if (visible(button) && enabled(button)) {
-                        return button;
+                    if (visible(button) && enabled(button) && isNextStepText(safeText(button))) {
+                        return clickableTarget(button);
                     }
                 }
             }
@@ -424,8 +441,18 @@ public class NaukriJobPage {
             Object question = group.evaluate("""
                     el => {
                       const clone = el.cloneNode(true);
-                      clone.querySelectorAll('input, textarea, select, option, button, [role="button"], svg, path')
-                        .forEach(node => node.remove());
+                      clone.querySelectorAll('[role="radio"], [role="checkbox"], label:has(input[type="radio"]), label:has(input[type="checkbox"]), [class*="radio"], [class*="Radio"], [class*="checkbox"], [class*="Checkbox"], [class*="option"], [class*="Option"]').forEach(node => {
+                        if (node !== clone) node.remove();
+                      });
+                      clone.querySelectorAll('input, textarea, select, option').forEach(node => {
+                        const optionRow = node.closest('label, li, [class*="option"], [class*="Option"], [class*="radio"], [class*="Radio"], [class*="checkbox"], [class*="Checkbox"]');
+                        if (optionRow && optionRow !== clone) {
+                          optionRow.remove();
+                        } else {
+                          node.remove();
+                        }
+                      });
+                      clone.querySelectorAll('button, [role="button"], svg, path').forEach(node => node.remove());
                       clone.querySelectorAll('label').forEach(label => {
                         if (label.getAttribute('for') || label.querySelector('input, textarea, select')) {
                           label.remove();
@@ -442,23 +469,40 @@ public class NaukriJobPage {
 
     private Locator nearestQuestionGroup(Locator control) {
         try {
+            Locator drawer = control.locator(
+                    "xpath=ancestor::*[contains(@class,'drawer') or contains(@class,'Drawer') "
+                            + "or contains(@class,'ssrc__drawer') or contains(@id,'ssrc') "
+                            + "or contains(@class,'chatbot') or contains(@class,'Chatbot') "
+                            + "or contains(@class,'chatBot') or @role='dialog']"
+                            + "[count(.//input[@type='radio' or @type='checkbox']) + count(.//button) "
+                            + "+ count(.//*[@role='button' or @role='radio' or @role='checkbox']) "
+                            + "+ count(.//*[contains(@class,'radio') or contains(@class,'Radio') or contains(@class,'checkbox') or contains(@class,'Checkbox') or contains(@class,'option') or contains(@class,'Option')]) > 1][1]");
+            if (drawer.count() > 0) {
+                return drawer.first();
+            }
+        } catch (Exception ignored) {
+        }
+        try {
             Locator groupedChoices = control.locator(
-                    "xpath=ancestor::*[self::fieldset or self::li or self::div]"
-                            + "[count(.//input[@type='radio' or @type='checkbox']) + count(.//button) + count(.//*[@role='button']) > 1][1]");
+                    "xpath=ancestor::*[self::fieldset or self::form or self::section or self::article or self::aside or self::li or self::div]"
+                            + "[not(contains(@class,'radio') or contains(@class,'Radio') or contains(@class,'checkbox') or contains(@class,'Checkbox') or contains(@class,'option') or contains(@class,'Option'))]"
+                            + "[count(.//input[@type='radio' or @type='checkbox']) + count(.//button) "
+                            + "+ count(.//*[@role='button' or @role='radio' or @role='checkbox']) "
+                            + "+ count(.//*[contains(@class,'radio') or contains(@class,'Radio') or contains(@class,'checkbox') or contains(@class,'Checkbox') or contains(@class,'option') or contains(@class,'Option')]) > 1][1]");
             if (groupedChoices.count() > 0) {
                 return groupedChoices.first();
             }
         } catch (Exception ignored) {
         }
         try {
-            Locator preferred = control.locator("xpath=ancestor::*[self::fieldset or self::li or self::div][contains(@class,'question') or contains(@class,'Question') or contains(@class,'ques') or contains(@class,'Ques')][1]");
+            Locator preferred = control.locator("xpath=ancestor::*[self::fieldset or self::form or self::section or self::article or self::aside or self::li or self::div][contains(@class,'question') or contains(@class,'Question') or contains(@class,'ques') or contains(@class,'Ques')][1]");
             if (preferred.count() > 0) {
                 return preferred.first();
             }
         } catch (Exception ignored) {
         }
         try {
-            Locator generic = control.locator("xpath=ancestor::*[self::fieldset or self::li or self::div][1]");
+            Locator generic = control.locator("xpath=ancestor::*[self::fieldset or self::form or self::section or self::article or self::aside or self::li or self::div][1]");
             if (generic.count() > 0) {
                 return generic.first();
             }
@@ -486,11 +530,11 @@ public class NaukriJobPage {
     }
 
     private boolean clickMatchingChoice(Locator group, String answer) {
-        Locator choices = group.locator("input[type='radio'], input[type='checkbox'], button, [role='button']");
+        Locator choices = group.locator(CHOICE_CONTROL_SELECTORS);
         int count = Math.min(choices.count(), 16);
         for (int i = 0; i < count; i++) {
             Locator choice = choices.nth(i);
-            if (!enabled(choice) || isAlreadySelected(choice)) {
+            if (!isChoiceOptionCandidate(choice) || !enabled(choice) || isAlreadySelected(choice)) {
                 continue;
             }
             String option = choiceText(choice);
@@ -506,6 +550,38 @@ public class NaukriJobPage {
     }
 
     private void selectChoice(Locator choice) {
+        try {
+            Object selected = choice.evaluate("""
+                    el => {
+                      const input = el.matches("input[type='radio'], input[type='checkbox']")
+                        ? el
+                        : el.querySelector("input[type='radio'], input[type='checkbox']");
+                      if (!input) return false;
+                      input.scrollIntoView({ block: 'center', inline: 'nearest' });
+                      const label = input.id
+                        ? document.querySelector(`label[for="${CSS.escape(input.id)}"]`)
+                        : null;
+                      const optionRow = input.closest('label, [role="radio"], [role="checkbox"], [class*="radio"], [class*="Radio"], [class*="checkbox"], [class*="Checkbox"], [class*="option"], [class*="Option"], li, div');
+                      const clickable = label || input.closest('label') || input;
+                      clickable.click();
+                      if (!input.checked && optionRow && optionRow !== input) {
+                        optionRow.click();
+                      }
+                      if (!input.checked) {
+                        input.checked = true;
+                      }
+                      input.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                      input.dispatchEvent(new Event('input', { bubbles: true }));
+                      input.dispatchEvent(new Event('change', { bubbles: true }));
+                      return true;
+                    }
+                    """);
+            if (Boolean.TRUE.equals(selected)) {
+                human.pause();
+                return;
+            }
+        } catch (Exception ignored) {
+        }
         try {
             choice.scrollIntoViewIfNeeded();
             choice.click();
@@ -523,7 +599,8 @@ public class NaukriJobPage {
                             const label = input.id
                               ? document.querySelector(`label[for="${CSS.escape(input.id)}"]`)
                               : null;
-                            const clickable = label || input.closest('label') || input;
+                            const optionRow = input.closest('label, [role="radio"], [role="checkbox"], [class*="radio"], [class*="Radio"], [class*="checkbox"], [class*="Checkbox"], [class*="option"], [class*="Option"], li, div');
+                            const clickable = label || input.closest('label') || optionRow || input;
                             clickable.click();
                             input.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
                             if (!input.checked) {
@@ -549,7 +626,10 @@ public class NaukriJobPage {
                     el => {
                       const clean = value => (value || '').replace(/\\s+/g, ' ').trim();
                       const tag = el.tagName.toLowerCase();
-                      if (tag === 'button' || el.getAttribute('role') === 'button') {
+                      const role = el.getAttribute('role');
+                      const className = (el.className || '').toString().toLowerCase();
+                      if (tag === 'button' || tag === 'label' || role === 'button' || role === 'radio' || role === 'checkbox'
+                          || className.includes('radio') || className.includes('checkbox') || className.includes('option')) {
                         return clean(el.innerText || el.textContent || el.getAttribute('aria-label'));
                       }
                       const id = el.getAttribute('id');
@@ -585,6 +665,28 @@ public class NaukriJobPage {
                     }
                     """);
             return value != null && !value.toString().isBlank();
+        } catch (Exception exception) {
+            return false;
+        }
+    }
+
+    private boolean isChoiceOptionCandidate(Locator choice) {
+        try {
+            Object candidate = choice.evaluate("""
+                    el => {
+                      const tag = el.tagName.toLowerCase();
+                      const type = (el.getAttribute('type') || '').toLowerCase();
+                      const role = el.getAttribute('role');
+                      const className = (el.className || '').toString().toLowerCase();
+                      const nestedChoiceCount = el.querySelectorAll("input[type='radio'], input[type='checkbox'], [role='radio'], [role='checkbox']").length;
+                      if (tag === 'input') return type === 'radio' || type === 'checkbox';
+                      if (role === 'radio' || role === 'checkbox') return nestedChoiceCount <= 1;
+                      if (tag === 'label') return nestedChoiceCount === 1;
+                      if (className.includes('radio') || className.includes('checkbox') || className.includes('option')) return nestedChoiceCount <= 1;
+                      return tag === 'button' || role === 'button';
+                    }
+                    """);
+            return Boolean.TRUE.equals(candidate);
         } catch (Exception exception) {
             return false;
         }
@@ -691,7 +793,19 @@ public class NaukriJobPage {
 
     private boolean enabled(Locator locator) {
         try {
-            return locator.isEnabled();
+            if (!locator.isEnabled()) {
+                return false;
+            }
+            Object disabled = locator.evaluate("""
+                    el => {
+                      const className = (el.className || '').toString().toLowerCase();
+                      const ariaDisabled = (el.getAttribute('aria-disabled') || '').toLowerCase() === 'true';
+                      const disabledClass = className.includes('disabled');
+                      const disabledAncestor = el.closest('[aria-disabled="true"], .disabled, [class*="disabled"], [class*="Disabled"]');
+                      return Boolean(el.disabled || ariaDisabled || disabledClass || disabledAncestor);
+                    }
+                    """);
+            return !Boolean.TRUE.equals(disabled);
         } catch (Exception exception) {
             return false;
         }
