@@ -29,7 +29,7 @@ Important variables:
 - `APP_CORS_ALLOWED_ORIGIN_PATTERNS`: UI origins allowed to call the API, default includes localhost, `127.0.0.1`, IPv6 localhost, and private LAN dev hosts
 - `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD` if overriding the default H2 database
 - `APP_BOOTSTRAP_ADMIN_EMAIL`, `APP_BOOTSTRAP_ADMIN_PASSWORD`
-- `BOT_DRY_RUN=true` for safe local testing
+- `BOT_DRY_RUN=false` for real Start Bot runs; set it to `true` only for safe local testing
 - `BOT_MOCK=true` only for local smoke tests that should not contact Naukri
 - `BOT_MANUAL_LOGIN_TIMEOUT_SECONDS` for the manual captcha login window, default `600`
 - `BOT_QUESTION_ANSWER_TIMEOUT_SECONDS` for the live question answer popup window, default `600`
@@ -111,7 +111,7 @@ npm.cmd test
 - APIs are role-aware and protected by bearer token.
 - DB access is through Spring Data JPA parameterized queries.
 - Captcha is detected and pauses automation; this app does not bypass captcha.
-- Keep `BOT_DRY_RUN=true` until credentials, filters, and compliance approvals are validated.
+- Set `BOT_DRY_RUN=true` while validating credentials, filters, and compliance approvals; set it back to `false` when Start Bot should click real apply controls.
 - Use `BOT_MOCK=true` only for automated local smoke tests; leave it false for real Playwright automation.
 
 ## Manual Captcha Login Recovery

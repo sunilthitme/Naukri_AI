@@ -51,7 +51,7 @@ app:
   bot:
     storage-dir: ${BOT_STORAGE_DIR:../storage}
     headless: ${BOT_HEADLESS:true}
-    dry-run: ${BOT_DRY_RUN:true}
+    dry-run: ${BOT_DRY_RUN:false}
     mock: ${BOT_MOCK:false}
     max-retries: ${BOT_MAX_RETRIES:2}
     proxy-host: ${BOT_PROXY_HOST:}

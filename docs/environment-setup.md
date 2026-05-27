@@ -70,9 +70,9 @@ When a Naukri apply popup asks a question that is not already saved in Q&A, the 
 BOT_QUESTION_ANSWER_TIMEOUT_SECONDS=600
 ```
 
-## Safe Automation Mode
+## Automation Mode
 
-Keep dry run enabled until the account, filters, resume paths, proxy, and compliance review are complete:
+The default backend run uses real apply mode. Keep dry run enabled only while the account, filters, resume paths, proxy, and compliance review are being validated:
 
 ```env
 BOT_DRY_RUN=true
