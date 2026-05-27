@@ -17,8 +17,10 @@ import java.nio.file.Path;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NaukriJobPageTest {
     @Test
@@ -45,6 +47,76 @@ class NaukriJobPageTest {
                     1);
 
             assertEquals(ApplyStatus.ALREADY_APPLIED, result.status());
+        }
+    }
+
+    @Test
+    void asksForUnknownTextQuestionAndSubmitsSavedAnswer() {
+        try (Playwright playwright = Playwright.create();
+             Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true))) {
+            Page page = browser.newPage();
+            NaukriJobPage jobPage = new NaukriJobPage(page);
+            AtomicReference<String> askedQuestion = new AtomicReference<>();
+
+            JobApplicationResult result = jobPage.apply(
+                    new DiscoveredJob("Example Co", "Java Developer", dataUrl("""
+                            <!doctype html>
+                            <html>
+                              <body>
+                                <button onclick="document.body.insertAdjacentHTML('beforeend', `
+                                  <div role='dialog'>
+                                    <label for='notice'>What is your notice period?</label>
+                                    <input id='notice' type='text'>
+                                    <button onclick=&quot;document.body.innerHTML='Application sent'&quot;>Continue</button>
+                                  </div>`)">Apply</button>
+                              </body>
+                            </html>
+                            """), "3-5 years", "Not disclosed", "Pune", ""),
+                    request(),
+                    question -> {
+                        askedQuestion.set(question);
+                        return Optional.of("30 days");
+                    },
+                    1);
+
+            assertEquals(ApplyStatus.SUCCESS, result.status());
+            assertTrue(askedQuestion.get().contains("notice period"));
+        }
+    }
+
+    @Test
+    void answersChoiceQuestionFromApplicationDialog() {
+        try (Playwright playwright = Playwright.create();
+             Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true))) {
+            Page page = browser.newPage();
+            NaukriJobPage jobPage = new NaukriJobPage(page);
+            AtomicReference<String> askedQuestion = new AtomicReference<>();
+
+            JobApplicationResult result = jobPage.apply(
+                    new DiscoveredJob("Example Co", "Java Developer", dataUrl("""
+                            <!doctype html>
+                            <html>
+                              <body>
+                                <button onclick="document.body.insertAdjacentHTML('beforeend', `
+                                  <div role='dialog'>
+                                    <p>Are you willing to relocate?</p>
+                                    <span id='answer'></span>
+                                    <button onclick=&quot;document.getElementById('answer').textContent='yes'&quot;>Yes</button>
+                                    <button onclick=&quot;document.getElementById('answer').textContent='no'&quot;>No</button>
+                                    <button onclick=&quot;if (document.getElementById('answer').textContent) document.body.innerHTML='Applied successfully'&quot;>Continue</button>
+                                  </div>`)">Apply</button>
+                              </body>
+                            </html>
+                            """), "3-5 years", "Not disclosed", "Pune", ""),
+                    request(),
+                    question -> {
+                        askedQuestion.set(question);
+                        return Optional.of("yes");
+                    },
+                    1);
+
+            assertEquals(ApplyStatus.SUCCESS, result.status());
+            assertTrue(askedQuestion.get().contains("relocate"));
         }
     }
 

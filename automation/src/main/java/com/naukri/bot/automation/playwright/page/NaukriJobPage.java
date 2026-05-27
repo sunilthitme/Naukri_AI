@@ -3,6 +3,7 @@ package com.naukri.bot.automation.playwright.page;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.options.WaitUntilState;
+import com.microsoft.playwright.options.SelectOption;
 import com.naukri.bot.automation.AutomationActivityListener;
 import com.naukri.bot.automation.QuestionAnswerProvider;
 import com.naukri.bot.automation.model.ApplyStatus;
@@ -14,7 +15,9 @@ import com.naukri.bot.automation.playwright.HumanBehavior;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
 
 public class NaukriJobPage {
     private static final int MAX_APPLY_STEPS = 6;
@@ -28,6 +31,9 @@ public class NaukriJobPage {
     private static final String GLOBAL_NEXT_STEP_SELECTORS = "button:has-text('Submit'), button:has-text('Send'), "
             + "button:has-text('Continue'), button:has-text('Next'), button:has-text('Proceed'), "
             + "button:has-text('Submit application'), button:has-text('Save and continue')";
+    private static final String QUESTION_FIELD_SELECTORS = "textarea, input[type='text'], input[type='number'], "
+            + "input[type='tel'], input:not([type]), [contenteditable='true'], select";
+    private static final String CHOICE_CONTROL_SELECTORS = "input[type='radio'], input[type='checkbox'], button, [role='button']";
 
     private final Page page;
     private final AutomationActivityListener activityListener;
@@ -160,15 +166,27 @@ public class NaukriJobPage {
     }
 
     private AnswerOutcome answerQuestions(QuestionAnswerProvider answerProvider) {
-        Locator fields = page.locator("textarea, input[type='text'], input[type='number'], input[type='tel'], input:not([type]), select");
+        AnswerOutcome fieldOutcome = answerFieldQuestions(answerProvider);
+        if (fieldOutcome == AnswerOutcome.NEEDS_USER_INPUT) {
+            return fieldOutcome;
+        }
+        return answerChoiceQuestions(answerProvider);
+    }
+
+    private AnswerOutcome answerFieldQuestions(QuestionAnswerProvider answerProvider) {
+        Locator fields = questionScopedLocator(QUESTION_FIELD_SELECTORS);
         int count = Math.min(fields.count(), 8);
+        Set<String> processed = new HashSet<>();
         for (int i = 0; i < count; i++) {
             Locator field = fields.nth(i);
-            if (!visible(field)) {
+            if (!visible(field) || !enabled(field) || isNonApplicationField(field) || hasAnswerValue(field)) {
                 continue;
             }
             String question = inferQuestion(field);
             if (question.isBlank()) {
+                continue;
+            }
+            if (!processed.add(normalizeForProcessing(question))) {
                 continue;
             }
             activity("Answering application question: " + question);
@@ -177,11 +195,48 @@ public class NaukriJobPage {
                 activity("No saved answer found for question: " + question);
                 return AnswerOutcome.NEEDS_USER_INPUT;
             }
-            String tagName = field.evaluate("el => el.tagName.toLowerCase()").toString();
-            if ("select".equals(tagName)) {
-                field.selectOption(answer);
-            } else {
-                human.type(field, answer);
+            fillField(field, answer);
+        }
+        return AnswerOutcome.COMPLETE;
+    }
+
+    private AnswerOutcome answerChoiceQuestions(QuestionAnswerProvider answerProvider) {
+        Locator container = firstApplicationContainerWith(CHOICE_CONTROL_SELECTORS);
+        if (container == null) {
+            return AnswerOutcome.COMPLETE;
+        }
+        Locator choices = container.locator("input[type='radio'], input[type='checkbox'], button, [role='button']");
+        int count = Math.min(choices.count(), 16);
+        Set<String> processed = new HashSet<>();
+        for (int i = 0; i < count; i++) {
+            Locator choice = choices.nth(i);
+            if (!visible(choice) || !enabled(choice) || isAlreadySelected(choice)) {
+                continue;
+            }
+            String optionText = choiceText(choice);
+            if (isNextStepText(optionText) || optionText.isBlank()) {
+                continue;
+            }
+            Locator group = nearestQuestionGroup(choice);
+            String question = inferQuestion(choice);
+            if (question.isBlank() || question.equalsIgnoreCase(optionText)) {
+                question = questionText(group);
+            }
+            if (question.isBlank()) {
+                continue;
+            }
+            if (!processed.add(normalizeForProcessing(question))) {
+                continue;
+            }
+            activity("Answering application choice question: " + question);
+            String answer = answerProvider.answerFor(question).orElse(null);
+            if (answer == null || answer.isBlank()) {
+                activity("No saved answer found for question: " + question);
+                return AnswerOutcome.NEEDS_USER_INPUT;
+            }
+            if (!clickMatchingChoice(group, answer) && !clickMatchingChoice(container, answer)) {
+                activity("No visible answer option matched '" + compact(answer) + "' for question: " + question);
+                return AnswerOutcome.NEEDS_USER_INPUT;
             }
         }
         return AnswerOutcome.COMPLETE;
@@ -239,6 +294,28 @@ public class NaukriJobPage {
         return firstVisible(GLOBAL_NEXT_STEP_SELECTORS);
     }
 
+    private Locator questionScopedLocator(String selector) {
+        Locator container = firstApplicationContainerWith(selector);
+        return container == null ? page.locator(selector) : container.locator(selector);
+    }
+
+    private Locator firstApplicationContainerWith(String childSelector) {
+        try {
+            Locator containers = page.locator(APPLICATION_CONTAINER_SELECTORS);
+            int containerCount = Math.min(containers.count(), 12);
+            for (int i = 0; i < containerCount; i++) {
+                Locator container = containers.nth(i);
+                if (!visible(container) || container.locator(childSelector).count() == 0) {
+                    continue;
+                }
+                return container;
+            }
+            return null;
+        } catch (Exception exception) {
+            return null;
+        }
+    }
+
     private Locator firstVisibleInContainers(String containerSelector, String childSelector) {
         try {
             Locator containers = page.locator(containerSelector);
@@ -265,14 +342,8 @@ public class NaukriJobPage {
 
     private boolean hasQuestionFields() {
         try {
-            Locator fields = page.locator("textarea, input[type='text'], input[type='number'], input[type='tel'], input:not([type]), select");
-            int count = Math.min(fields.count(), 8);
-            for (int i = 0; i < count; i++) {
-                if (visible(fields.nth(i))) {
-                    return true;
-                }
-            }
-            return false;
+            return firstApplicationContainerWith(QUESTION_FIELD_SELECTORS) != null
+                    || firstApplicationContainerWith("input[type='radio'], input[type='checkbox']") != null;
         } catch (Exception exception) {
             return false;
         }
@@ -300,21 +371,227 @@ public class NaukriJobPage {
 
     private String inferQuestion(Locator field) {
         try {
-            String aria = field.getAttribute("aria-label");
-            if (aria != null && !aria.isBlank()) {
-                return aria;
-            }
-            String id = field.getAttribute("id");
-            if (id != null && !id.isBlank()) {
-                Locator label = page.locator("label[for='" + id + "']").first();
-                if (label.count() > 0) {
-                    return label.innerText();
-                }
-            }
-            return field.locator("xpath=ancestor::*[self::div or self::li][1]").innerText();
+            Object question = field.evaluate("""
+                    el => {
+                      const clean = value => (value || '').replace(/\\s+/g, ' ').trim();
+                      const type = (el.getAttribute('type') || '').toLowerCase();
+                      const containerText = () => {
+                        const container = el.closest('[class*="question"], [class*="Question"], [class*="ques"], [class*="Ques"], fieldset, li, div');
+                        if (!container) return '';
+                        const clone = container.cloneNode(true);
+                        clone.querySelectorAll('input, textarea, select, option, button, svg, path').forEach(node => node.remove());
+                        return clean(clone.innerText || clone.textContent);
+                      };
+                      if (type === 'radio' || type === 'checkbox' || el.tagName.toLowerCase() === 'button') {
+                        const grouped = containerText();
+                        if (grouped) return grouped;
+                      }
+                      const aria = clean(el.getAttribute('aria-label'));
+                      if (aria) return aria;
+                      const labelledBy = clean(el.getAttribute('aria-labelledby'));
+                      if (labelledBy) {
+                        const labelText = labelledBy.split(/\\s+/)
+                          .map(id => document.getElementById(id))
+                          .filter(Boolean)
+                          .map(node => clean(node.innerText || node.textContent))
+                          .filter(Boolean)
+                          .join(' ');
+                        if (labelText) return labelText;
+                      }
+                      const id = el.getAttribute('id');
+                      if (id) {
+                        const label = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+                        const labelText = clean(label && (label.innerText || label.textContent));
+                        if (labelText) return labelText;
+                      }
+                      const placeholder = clean(el.getAttribute('placeholder'));
+                      if (placeholder) return placeholder;
+                      return containerText();
+                    }
+                    """);
+            return cleanQuestion(question == null ? "" : question.toString());
         } catch (Exception exception) {
             return "";
         }
+    }
+
+    private String questionText(Locator group) {
+        try {
+            Object question = group.evaluate("""
+                    el => {
+                      const clone = el.cloneNode(true);
+                      clone.querySelectorAll('input, textarea, select, option, button, svg, path').forEach(node => node.remove());
+                      return (clone.innerText || clone.textContent || '').replace(/\\s+/g, ' ').trim();
+                    }
+                    """);
+            return cleanQuestion(question == null ? "" : question.toString());
+        } catch (Exception exception) {
+            return "";
+        }
+    }
+
+    private Locator nearestQuestionGroup(Locator control) {
+        try {
+            Locator preferred = control.locator("xpath=ancestor::*[self::fieldset or self::li or self::div][contains(@class,'question') or contains(@class,'Question') or contains(@class,'ques') or contains(@class,'Ques')][1]");
+            if (preferred.count() > 0) {
+                return preferred.first();
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            Locator generic = control.locator("xpath=ancestor::*[self::fieldset or self::li or self::div][1]");
+            if (generic.count() > 0) {
+                return generic.first();
+            }
+        } catch (Exception ignored) {
+        }
+        return control;
+    }
+
+    private void fillField(Locator field, String answer) {
+        try {
+            String tagName = field.evaluate("el => el.tagName.toLowerCase()").toString();
+            if ("select".equals(tagName)) {
+                try {
+                    field.selectOption(answer);
+                } catch (Exception valueMiss) {
+                    field.selectOption(new SelectOption().setLabel(answer));
+                }
+                return;
+            }
+            human.type(field, answer);
+        } catch (Exception typingFailure) {
+            field.click();
+            field.pressSequentially(answer);
+        }
+    }
+
+    private boolean clickMatchingChoice(Locator group, String answer) {
+        Locator choices = group.locator("input[type='radio'], input[type='checkbox'], button, [role='button']");
+        int count = Math.min(choices.count(), 16);
+        for (int i = 0; i < count; i++) {
+            Locator choice = choices.nth(i);
+            if (!visible(choice) || !enabled(choice) || isAlreadySelected(choice)) {
+                continue;
+            }
+            String option = choiceText(choice);
+            if (isNextStepText(option) || !answerMatchesOption(answer, option)) {
+                continue;
+            }
+            activity("Selecting answer option: " + compact(option));
+            try {
+                choice.click();
+            } catch (Exception clickFailure) {
+                choice.click(new Locator.ClickOptions().setForce(true));
+            }
+            human.pause();
+            return true;
+        }
+        return false;
+    }
+
+    private String choiceText(Locator choice) {
+        try {
+            Object text = choice.evaluate("""
+                    el => {
+                      const clean = value => (value || '').replace(/\\s+/g, ' ').trim();
+                      const tag = el.tagName.toLowerCase();
+                      if (tag === 'button' || el.getAttribute('role') === 'button') {
+                        return clean(el.innerText || el.textContent || el.getAttribute('aria-label'));
+                      }
+                      const id = el.getAttribute('id');
+                      if (id) {
+                        const label = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+                        const labelText = clean(label && (label.innerText || label.textContent));
+                        if (labelText) return labelText;
+                      }
+                      const closestLabel = el.closest('label');
+                      const closestLabelText = clean(closestLabel && (closestLabel.innerText || closestLabel.textContent));
+                      if (closestLabelText) return closestLabelText;
+                      const aria = clean(el.getAttribute('aria-label'));
+                      if (aria) return aria;
+                      const parent = el.parentElement;
+                      const parentText = clean(parent && (parent.innerText || parent.textContent));
+                      return parentText || clean(el.value || el.getAttribute('value'));
+                    }
+                    """);
+            return compact(text == null ? "" : text.toString());
+        } catch (Exception exception) {
+            return "";
+        }
+    }
+
+    private boolean hasAnswerValue(Locator field) {
+        try {
+            Object value = field.evaluate("""
+                    el => {
+                      const tag = el.tagName.toLowerCase();
+                      if (tag === 'select') return el.value || '';
+                      if (el.isContentEditable) return el.innerText || el.textContent || '';
+                      return el.value || '';
+                    }
+                    """);
+            return value != null && !value.toString().isBlank();
+        } catch (Exception exception) {
+            return false;
+        }
+    }
+
+    private boolean isAlreadySelected(Locator choice) {
+        try {
+            Object selected = choice.evaluate("""
+                    el => Boolean(el.checked || el.getAttribute('aria-checked') === 'true' || el.className?.toString().toLowerCase().includes('selected'))
+                    """);
+            return Boolean.TRUE.equals(selected);
+        } catch (Exception exception) {
+            return false;
+        }
+    }
+
+    private boolean isNonApplicationField(Locator field) {
+        try {
+            Object descriptor = field.evaluate("""
+                    el => [el.getAttribute('placeholder'), el.getAttribute('aria-label'), el.getAttribute('name'), el.getAttribute('type')]
+                      .filter(Boolean)
+                      .join(' ')
+                      .toLowerCase()
+                    """);
+            String text = descriptor == null ? "" : descriptor.toString();
+            return text.contains("search jobs") || text.equals("search") || text.contains("search here");
+        } catch (Exception exception) {
+            return false;
+        }
+    }
+
+    private boolean answerMatchesOption(String answer, String option) {
+        String normalizedAnswer = normalizeForProcessing(answer);
+        String normalizedOption = normalizeForProcessing(option);
+        if (normalizedAnswer.isBlank() || normalizedOption.isBlank()) {
+            return false;
+        }
+        if (normalizedOption.equals(normalizedAnswer)
+                || normalizedOption.contains(normalizedAnswer)
+                || normalizedAnswer.contains(normalizedOption)) {
+            return true;
+        }
+        return (normalizedAnswer.startsWith("y") && normalizedOption.equals("yes"))
+                || (normalizedAnswer.startsWith("n") && normalizedOption.equals("no"));
+    }
+
+    private boolean isNextStepText(String text) {
+        String normalized = normalizeForProcessing(text);
+        return normalized.equals("submit")
+                || normalized.equals("send")
+                || normalized.equals("continue")
+                || normalized.equals("next")
+                || normalized.equals("save")
+                || normalized.equals("done")
+                || normalized.equals("ok")
+                || normalized.equals("proceed")
+                || normalized.equals("apply")
+                || normalized.equals("applied")
+                || normalized.contains("submit application")
+                || normalized.contains("save and continue");
     }
 
     private boolean captchaDetected() {
@@ -378,6 +655,20 @@ public class NaukriJobPage {
     private String compact(String value) {
         String text = value == null ? "" : value.replaceAll("\\s+", " ").trim();
         return text.length() <= 120 ? text : text.substring(0, 117) + "...";
+    }
+
+    private String cleanQuestion(String value) {
+        return compact(value)
+                .replaceAll("(?i)\\b(submit|continue|next|save and continue|save|done|ok|proceed)\\b", "")
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
+    private String normalizeForProcessing(String value) {
+        return value == null ? "" : value.toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9 ]", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
     }
 
     private boolean visible(Locator locator) {
