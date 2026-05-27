@@ -10,7 +10,8 @@ class EncryptionServiceTest {
     @Test
     void encryptsAndDecryptsValue() {
         AppProperties properties = new AppProperties(
-                new AppProperties.Security("01234567890123456789012345678901", "01234567890123456789012345678901", 60),
+                new AppProperties.Security("01234567890123456789012345678901", "01234567890123456789012345678901",
+                        60, java.util.List.of("http://localhost:*")),
                 new AppProperties.Bootstrap("", ""),
                 new AppProperties.Bot("target/test-storage", true, true, true, 0, "", null, "", "", 600, 600),
                 new AppProperties.Llm("", "", ""),

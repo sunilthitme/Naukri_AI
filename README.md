@@ -26,6 +26,7 @@ Important variables:
 
 - `APP_JWT_SECRET`: at least 32 characters
 - `APP_ENCRYPTION_KEY`: at least 32 characters; first 32 bytes are used for AES
+- `APP_CORS_ALLOWED_ORIGIN_PATTERNS`: UI origins allowed to call the API, default includes localhost, `127.0.0.1`, IPv6 localhost, and private LAN dev hosts
 - `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD` if overriding the default H2 database
 - `APP_BOOTSTRAP_ADMIN_EMAIL`, `APP_BOOTSTRAP_ADMIN_PASSWORD`
 - `BOT_DRY_RUN=true` for safe local testing

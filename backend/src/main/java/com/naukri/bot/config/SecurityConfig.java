@@ -30,6 +30,7 @@ import java.util.List;
 public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final UserDetailsService userDetailsService;
+    private final AppProperties properties;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -65,12 +66,26 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:4200", "http://127.0.0.1:4200"));
+        configuration.setAllowedOriginPatterns(corsAllowedOriginPatterns());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
+        configuration.setExposedHeaders(List.of("Content-Disposition"));
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
+    }
+
+    private List<String> corsAllowedOriginPatterns() {
+        List<String> configuredPatterns = properties.security().corsAllowedOriginPatterns();
+        if (configuredPatterns == null || configuredPatterns.isEmpty()) {
+            return List.of("http://localhost:*", "http://127.0.0.1:*");
+        }
+        List<String> activePatterns = configuredPatterns.stream()
+                .filter(pattern -> pattern != null && !pattern.isBlank())
+                .toList();
+        return activePatterns.isEmpty()
+                ? List.of("http://localhost:*", "http://127.0.0.1:*")
+                : activePatterns;
     }
 }

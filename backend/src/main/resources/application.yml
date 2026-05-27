@@ -44,6 +44,7 @@ app:
     jwt-secret: ${APP_JWT_SECRET:local-development-jwt-secret-32-char}
     encryption-key: ${APP_ENCRYPTION_KEY:local-development-aes-secret-32char}
     token-expiration-minutes: ${APP_TOKEN_EXPIRATION_MINUTES:720}
+    cors-allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*,http://[::1]:*,http://192.168.*.*:*,http://10.*.*.*:*,http://172.*.*.*:*}
   bootstrap:
     admin-email: ${APP_BOOTSTRAP_ADMIN_EMAIL:admin@example.com}
     admin-password: ${APP_BOOTSTRAP_ADMIN_PASSWORD:ChangeMe123!}

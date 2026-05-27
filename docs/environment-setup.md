@@ -38,6 +38,14 @@ npm.cmd install
 npm.cmd run build
 ```
 
+## Local CORS
+
+The backend accepts local UI origins through `APP_CORS_ALLOWED_ORIGIN_PATTERNS`. The default allows `localhost`, `127.0.0.1`, IPv6 localhost, and private LAN dev URLs on any port:
+
+```env
+APP_CORS_ALLOWED_ORIGIN_PATTERNS=http://localhost:*,http://127.0.0.1:*,http://[::1]:*,http://192.168.*.*:*,http://10.*.*.*:*,http://172.*.*.*:*
+```
+
 ## Playwright
 
 The Docker backend image includes Playwright dependencies. On a local Windows machine, install the browser once if needed:
