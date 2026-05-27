@@ -9,4 +9,6 @@ import java.util.List;
 
 public interface BotLogRepository extends JpaRepository<BotLog, Long> {
     List<BotLog> findByUserOrderByCreatedAtDesc(User user, Pageable pageable);
+
+    void deleteByUser(User user);
 }

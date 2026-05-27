@@ -66,6 +66,7 @@ public class BotOrchestratorService {
     private final PendingQuestionService pendingQuestionService;
 
     public BotCommandResponse start(User user) {
+        botLogService.clear(user);
         String validationFailure = validateStartRequest(user);
         if (validationFailure != null) {
             botStatusService.set(user, BotRunStatus.FAILED, false, false, false, validationFailure);

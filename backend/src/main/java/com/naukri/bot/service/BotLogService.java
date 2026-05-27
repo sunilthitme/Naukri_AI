@@ -8,6 +8,7 @@ import com.naukri.bot.repository.BotLogRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -32,6 +33,11 @@ public class BotLogService {
         return botLogRepository.findByUserOrderByCreatedAtDesc(user, PageRequest.of(0, Math.min(limit, 500))).stream()
                 .map(log -> new BotLogResponse(log.getId(), log.getLevel(), log.getMessage(), log.getCreatedAt()))
                 .toList();
+    }
+
+    @Transactional
+    public void clear(User user) {
+        botLogRepository.deleteByUser(user);
     }
 
     private void save(User user, LogLevel level, String message) {
