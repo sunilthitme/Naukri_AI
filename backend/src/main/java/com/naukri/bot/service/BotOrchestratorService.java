@@ -146,14 +146,17 @@ public class BotOrchestratorService {
     }
 
     public BotCommandResponse testApply(User user) {
-        AutomationRunRequest request = request(user, true);
+        String message = "Test apply running in dry-run mode. Complete manual Naukri verification if a browser opens.";
+        botStatusService.set(user, BotRunStatus.RUNNING, true, false, false, message);
+        botLogService.info(user, message);
+        AutomationRunRequest request = request(user, true, true);
         AutomationRunResult result = automationClient.run(request, question -> answerForQuestion(user, question),
                 new Control(user.getId()), activityListener(user));
         persistResult(user, jobFilterRepository.findByUser(user).orElseThrow(), result);
         if (result.isCaptchaDetected()) {
-            String message = "Test apply stopped because Naukri requested captcha or account verification. No live applications were submitted.";
-            botStatusService.set(user, BotRunStatus.FAILED, false, false, false, message);
-            return new BotCommandResponse(message, BotRunStatus.FAILED);
+            String failure = "Test apply stopped because Naukri requested captcha or account verification. No live applications were submitted.";
+            botStatusService.set(user, BotRunStatus.FAILED, false, false, false, failure);
+            return new BotCommandResponse(failure, BotRunStatus.FAILED);
         }
         if (result.isLoginFailed()) {
             botStatusService.set(user, BotRunStatus.FAILED, false, false, false, result.getFailureReason());
