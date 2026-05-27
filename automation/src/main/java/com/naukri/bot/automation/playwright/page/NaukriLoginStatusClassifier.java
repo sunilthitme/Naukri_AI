@@ -9,9 +9,20 @@ public class NaukriLoginStatusClassifier {
     public LoginTestResult classify(String currentUrl, String bodyText, boolean passwordFieldVisible) {
         String url = normalize(currentUrl);
         String body = normalize(bodyText);
-        if (containsAny(url + " " + body, "captcha", "verify you are human", "robot check", "security check")) {
+        if (containsAny(url + " " + body,
+                "captcha",
+                "verify you are human",
+                "robot check",
+                "security check",
+                "access denied",
+                "request blocked",
+                "temporarily blocked",
+                "unusual traffic",
+                "too many requests",
+                "are you a robot",
+                "try reloading the page")) {
             return new LoginTestResult(false, LoginStatus.CAPTCHA_DETECTED,
-                    "Captcha or human verification detected during Naukri login.", currentUrl, null);
+                    "Captcha, access block, or human verification detected during Naukri login.", currentUrl, null);
         }
         if (containsAny(body, "otp", "one time password", "verification code", "verify mobile", "verify email")) {
             return new LoginTestResult(false, LoginStatus.OTP_REQUIRED,

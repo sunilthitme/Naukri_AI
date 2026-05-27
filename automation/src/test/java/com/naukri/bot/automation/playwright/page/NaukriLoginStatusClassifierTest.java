@@ -26,6 +26,14 @@ class NaukriLoginStatusClassifierTest {
     }
 
     @Test
+    void detectsAccessBlock() {
+        var result = classifier.classify("https://www.naukri.com/",
+                "Access denied. Try reloading the page.", false);
+
+        assertEquals(LoginStatus.CAPTCHA_DETECTED, result.status());
+    }
+
+    @Test
     void detectsSuccessfulProfilePage() {
         var result = classifier.classify("https://www.naukri.com/mnjuser/homepage",
                 "My Naukri View Profile Recommended jobs", false);
