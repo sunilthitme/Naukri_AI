@@ -210,7 +210,7 @@ public class NaukriJobPage {
         Set<String> processed = new HashSet<>();
         for (int i = 0; i < count; i++) {
             Locator choice = choices.nth(i);
-            if (!visible(choice) || !enabled(choice) || isAlreadySelected(choice)) {
+            if (!enabled(choice) || isAlreadySelected(choice)) {
                 continue;
             }
             String optionText = choiceText(choice);
@@ -218,7 +218,10 @@ public class NaukriJobPage {
                 continue;
             }
             Locator group = nearestQuestionGroup(choice);
-            String question = inferQuestion(choice);
+            String question = questionText(group);
+            if (question.isBlank()) {
+                question = inferQuestion(choice);
+            }
             if (question.isBlank() || question.equalsIgnoreCase(optionText)) {
                 question = questionText(group);
             }
@@ -238,6 +241,7 @@ public class NaukriJobPage {
                 activity("No visible answer option matched '" + compact(answer) + "' for question: " + question);
                 return AnswerOutcome.NEEDS_USER_INPUT;
             }
+            return AnswerOutcome.COMPLETE;
         }
         return AnswerOutcome.COMPLETE;
     }
@@ -420,7 +424,13 @@ public class NaukriJobPage {
             Object question = group.evaluate("""
                     el => {
                       const clone = el.cloneNode(true);
-                      clone.querySelectorAll('input, textarea, select, option, button, svg, path').forEach(node => node.remove());
+                      clone.querySelectorAll('input, textarea, select, option, button, [role="button"], svg, path')
+                        .forEach(node => node.remove());
+                      clone.querySelectorAll('label').forEach(label => {
+                        if (label.getAttribute('for') || label.querySelector('input, textarea, select')) {
+                          label.remove();
+                        }
+                      });
                       return (clone.innerText || clone.textContent || '').replace(/\\s+/g, ' ').trim();
                     }
                     """);
@@ -431,6 +441,15 @@ public class NaukriJobPage {
     }
 
     private Locator nearestQuestionGroup(Locator control) {
+        try {
+            Locator groupedChoices = control.locator(
+                    "xpath=ancestor::*[self::fieldset or self::li or self::div]"
+                            + "[count(.//input[@type='radio' or @type='checkbox']) + count(.//button) + count(.//*[@role='button']) > 1][1]");
+            if (groupedChoices.count() > 0) {
+                return groupedChoices.first();
+            }
+        } catch (Exception ignored) {
+        }
         try {
             Locator preferred = control.locator("xpath=ancestor::*[self::fieldset or self::li or self::div][contains(@class,'question') or contains(@class,'Question') or contains(@class,'ques') or contains(@class,'Ques')][1]");
             if (preferred.count() > 0) {
@@ -471,7 +490,7 @@ public class NaukriJobPage {
         int count = Math.min(choices.count(), 16);
         for (int i = 0; i < count; i++) {
             Locator choice = choices.nth(i);
-            if (!visible(choice) || !enabled(choice) || isAlreadySelected(choice)) {
+            if (!enabled(choice) || isAlreadySelected(choice)) {
                 continue;
             }
             String option = choiceText(choice);
@@ -479,15 +498,49 @@ public class NaukriJobPage {
                 continue;
             }
             activity("Selecting answer option: " + compact(option));
-            try {
-                choice.click();
-            } catch (Exception clickFailure) {
-                choice.click(new Locator.ClickOptions().setForce(true));
-            }
+            selectChoice(choice);
             human.pause();
             return true;
         }
         return false;
+    }
+
+    private void selectChoice(Locator choice) {
+        try {
+            choice.scrollIntoViewIfNeeded();
+            choice.click();
+            return;
+        } catch (Exception clickFailure) {
+            try {
+                choice.evaluate("""
+                        el => {
+                          const input = el.matches("input[type='radio'], input[type='checkbox']")
+                            ? el
+                            : el.querySelector("input[type='radio'], input[type='checkbox']");
+                          const target = input || el;
+                          target.scrollIntoView({ block: 'center', inline: 'nearest' });
+                          if (input) {
+                            const label = input.id
+                              ? document.querySelector(`label[for="${CSS.escape(input.id)}"]`)
+                              : null;
+                            const clickable = label || input.closest('label') || input;
+                            clickable.click();
+                            input.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                            if (!input.checked) {
+                              input.checked = true;
+                            }
+                            input.dispatchEvent(new Event('input', { bubbles: true }));
+                            input.dispatchEvent(new Event('change', { bubbles: true }));
+                            return true;
+                          }
+                          target.click();
+                          return true;
+                        }
+                        """);
+            } catch (Exception domClickFailure) {
+                choice.click(new Locator.ClickOptions().setForce(true));
+            }
+        }
     }
 
     private String choiceText(Locator choice) {

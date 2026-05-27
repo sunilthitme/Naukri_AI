@@ -151,8 +151,9 @@ public class BotOrchestratorService {
                 new Control(user.getId()), activityListener(user));
         persistResult(user, jobFilterRepository.findByUser(user).orElseThrow(), result);
         if (result.isCaptchaDetected()) {
-            botStatusService.set(user, BotRunStatus.CAPTCHA_REQUIRED, false, true, true, "Captcha detected. Manual login required.");
-            return new BotCommandResponse("Captcha detected. Manual login required.", BotRunStatus.CAPTCHA_REQUIRED);
+            String message = "Test apply stopped because Naukri requested captcha or account verification. No live applications were submitted.";
+            botStatusService.set(user, BotRunStatus.FAILED, false, false, false, message);
+            return new BotCommandResponse(message, BotRunStatus.FAILED);
         }
         if (result.isLoginFailed()) {
             botStatusService.set(user, BotRunStatus.FAILED, false, false, false, result.getFailureReason());
