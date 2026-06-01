@@ -1,6 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -87,6 +87,7 @@ export class LoginComponent {
   private readonly fb = inject(FormBuilder);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly snack = inject(MatSnackBar);
   loading = false;
 
@@ -94,6 +95,12 @@ export class LoginComponent {
     email: ['', [Validators.required, Validators.email]],
     password: ['', Validators.required]
   });
+
+  constructor() {
+    if (this.route.snapshot.queryParamMap.get('session') === 'expired') {
+      queueMicrotask(() => this.snack.open('Your app session expired. Please sign in again.', 'Close', { duration: 5000 }));
+    }
+  }
 
   submit(): void {
     if (this.form.invalid) {

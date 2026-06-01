@@ -8,6 +8,9 @@ export function apiErrorMessage(error: unknown, fallback = 'Request failed'): st
     if (error.status === 0) {
       return 'Backend is not reachable. Check that the Spring Boot API is running.';
     }
+    if (error.status === 401 || error.status === 403) {
+      return 'Your app session expired. Please sign in again.';
+    }
     const payload = error.error;
     if (typeof payload === 'string' && payload.trim()) {
       return payload;
