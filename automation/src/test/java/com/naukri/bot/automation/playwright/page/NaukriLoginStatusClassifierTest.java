@@ -34,10 +34,42 @@ class NaukriLoginStatusClassifierTest {
     }
 
     @Test
+    void detectsOtpOnLoginPage() {
+        var result = classifier.classify("https://www.naukri.com/nlogin/login",
+                "Enter OTP verification code sent to your email.", false);
+
+        assertEquals(LoginStatus.OTP_REQUIRED, result.status());
+    }
+
+    @Test
     void detectsSuccessfulProfilePage() {
         var result = classifier.classify("https://www.naukri.com/mnjuser/homepage",
                 "My Naukri View Profile Recommended jobs", false);
 
         assertTrue(result.success());
+    }
+
+    @Test
+    void detectsAuthenticatedHomepageUrlWithoutBodyMarkers() {
+        var result = classifier.classify("https://www.naukri.com/mnjuser/homepage",
+                "Welcome", false);
+
+        assertTrue(result.success());
+    }
+
+    @Test
+    void keepsAuthenticatedHomepageLoggedInWhenVerificationBannerAppears() {
+        var result = classifier.classify("https://www.naukri.com/mnjuser/homepage",
+                "Verify mobile number to improve account security.", false);
+
+        assertTrue(result.success());
+    }
+
+    @Test
+    void doesNotTreatPublicHomePageAsLoggedIn() {
+        var result = classifier.classify("https://www.naukri.com/",
+                "Jobs, recruitment, companies, career advice", false);
+
+        assertEquals(LoginStatus.STILL_ON_LOGIN_PAGE, result.status());
     }
 }

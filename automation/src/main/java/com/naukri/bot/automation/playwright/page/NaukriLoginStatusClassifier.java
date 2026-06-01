@@ -24,6 +24,9 @@ public class NaukriLoginStatusClassifier {
             return new LoginTestResult(false, LoginStatus.CAPTCHA_DETECTED,
                     "Captcha, access block, or human verification detected during Naukri login.", currentUrl, null);
         }
+        if (authenticatedUrl(url) && !passwordFieldVisible) {
+            return LoginTestResult.success(currentUrl);
+        }
         if (containsAny(body, "otp", "one time password", "verification code", "verify mobile", "verify email")) {
             return new LoginTestResult(false, LoginStatus.OTP_REQUIRED,
                     "Naukri asked for OTP or account verification.", currentUrl, null);
@@ -34,14 +37,18 @@ public class NaukriLoginStatusClassifier {
             return new LoginTestResult(false, LoginStatus.INVALID_CREDENTIALS,
                     "Naukri rejected the saved credentials.", currentUrl, null);
         }
-        if (containsAny(body, "my naukri", "view profile", "update profile", "recommended jobs", "profile performance", "logout")) {
-            return LoginTestResult.success(currentUrl);
-        }
-        if (!url.contains("login") && !url.contains("nlogin") && !passwordFieldVisible) {
+        if (containsAny(body, "my naukri", "view profile", "update profile", "recommended jobs",
+                "profile performance", "logout")) {
             return LoginTestResult.success(currentUrl);
         }
         return new LoginTestResult(false, LoginStatus.STILL_ON_LOGIN_PAGE,
                 "Naukri did not leave the login page after submitting credentials.", currentUrl, null);
+    }
+
+    private boolean authenticatedUrl(String url) {
+        return containsAny(url,
+                "naukri.com/mnjuser/",
+                "naukri.com/my-naukri");
     }
 
     private boolean containsAny(String source, String... needles) {

@@ -96,6 +96,10 @@ public class NaukriLoginPage {
         LoginForm loginForm = openLoginForm();
         if (loginForm == null) {
             LoginTestResult blocked = classifyCurrentPage();
+            if (blocked.success()) {
+                activity("Naukri session is already active. Continuing without login form.");
+                return blocked;
+            }
             if (blocked.status() == LoginStatus.CAPTCHA_DETECTED || blocked.status() == LoginStatus.OTP_REQUIRED) {
                 return blocked;
             }
@@ -193,9 +197,9 @@ public class NaukriLoginPage {
         if (currentState.status() == LoginStatus.CAPTCHA_DETECTED || currentState.status() == LoginStatus.OTP_REQUIRED) {
             return currentState;
         }
-        if (loggedIn(bodyText())) {
+        if (currentState.success()) {
             activity("Existing Naukri session is active. Reusing browser.");
-            return LoginTestResult.success(page.url());
+            return currentState;
         }
 
         try {
@@ -209,9 +213,9 @@ public class NaukriLoginPage {
         if (currentState.status() == LoginStatus.CAPTCHA_DETECTED || currentState.status() == LoginStatus.OTP_REQUIRED) {
             return currentState;
         }
-        if (loggedIn(bodyText())) {
+        if (currentState.success()) {
             activity("Existing Naukri session is active. Reusing browser.");
-            return LoginTestResult.success(page.url());
+            return currentState;
         }
         return new LoginTestResult(false, LoginStatus.STILL_ON_LOGIN_PAGE,
                 "Existing Naukri browser session is not logged in.", page.url(), null);
@@ -235,7 +239,9 @@ public class NaukriLoginPage {
                 return form;
             }
             LoginTestResult currentState = classifyCurrentPage();
-            if (currentState.status() == LoginStatus.CAPTCHA_DETECTED || currentState.status() == LoginStatus.OTP_REQUIRED) {
+            if (currentState.success()
+                    || currentState.status() == LoginStatus.CAPTCHA_DETECTED
+                    || currentState.status() == LoginStatus.OTP_REQUIRED) {
                 return null;
             }
         }
@@ -301,16 +307,6 @@ public class NaukriLoginPage {
         } catch (Exception exception) {
             return "";
         }
-    }
-
-    private boolean loggedIn(String bodyText) {
-        String body = bodyText == null ? "" : bodyText.toLowerCase();
-        return body.contains("my naukri")
-                || body.contains("view profile")
-                || body.contains("update profile")
-                || body.contains("profile performance")
-                || body.contains("naukri profile")
-                || body.contains("logout");
     }
 
     private boolean passwordFieldVisible() {
