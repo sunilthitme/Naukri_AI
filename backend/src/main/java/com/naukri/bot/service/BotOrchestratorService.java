@@ -14,6 +14,7 @@ import com.naukri.bot.config.AppProperties;
 import com.naukri.bot.domain.AppliedJob;
 import com.naukri.bot.domain.ApplyStatus;
 import com.naukri.bot.domain.BotRunStatus;
+import com.naukri.bot.domain.BotStatus;
 import com.naukri.bot.domain.ExternalRedirectJob;
 import com.naukri.bot.domain.JobFilter;
 import com.naukri.bot.domain.NaukriCredentials;
@@ -118,6 +119,13 @@ public class BotOrchestratorService {
     }
 
     public BotCommandResponse pause(User user) {
+        BotStatus currentStatus = botStatusService.get(user);
+        if (!currentStatus.isRunning()) {
+            String message = "Bot is not running. Start bot before pausing.";
+            botStatusService.set(user, currentStatus.getStatus(), false, false, currentStatus.isCaptchaDetected(), message);
+            botLogService.warn(user, message);
+            return new BotCommandResponse(message, currentStatus.getStatus());
+        }
         runtimeState.pause(user.getId());
         botStatusService.set(user, BotRunStatus.PAUSED, true, true, false, "Paused");
         botLogService.warn(user, "Automation paused");
@@ -125,6 +133,14 @@ public class BotOrchestratorService {
     }
 
     public BotCommandResponse resume(User user) {
+        BotStatus currentStatus = botStatusService.get(user);
+        if (!currentStatus.isRunning() || !currentStatus.isPaused()) {
+            String message = "Bot is not paused. Nothing to resume.";
+            botStatusService.set(user, currentStatus.getStatus(), currentStatus.isRunning(), false,
+                    currentStatus.isCaptchaDetected(), message);
+            botLogService.warn(user, message);
+            return new BotCommandResponse(message, currentStatus.getStatus());
+        }
         runtimeState.resume(user.getId());
         botStatusService.set(user, BotRunStatus.RUNNING, true, false, false, "Resumed");
         botLogService.info(user, "Automation resumed");
