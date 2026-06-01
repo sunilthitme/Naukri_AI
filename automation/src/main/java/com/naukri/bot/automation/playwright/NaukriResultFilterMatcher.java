@@ -14,9 +14,9 @@ public class NaukriResultFilterMatcher {
     private static final Set<String> GENERIC_KEYWORDS = Set.of(
             "developer", "engineer", "software", "job", "jobs", "role", "opening", "hiring", "senior", "junior"
     );
-    private static final Pattern EXPERIENCE_RANGE = Pattern.compile("(\\d{1,2})\\s*(?:-|to|–)\\s*(\\d{1,2})\\s*(?:yrs?|years?)");
+    private static final Pattern EXPERIENCE_RANGE = Pattern.compile("(\\d{1,2})\\s*(?:-|to)\\s*(\\d{1,2})\\s*(?:yrs?|years?)");
     private static final Pattern EXPERIENCE_MINIMUM = Pattern.compile("(\\d{1,2})\\+?\\s*(?:yrs?|years?)");
-    private static final Pattern SALARY_RANGE = Pattern.compile("(\\d{1,3}(?:\\.\\d+)?)\\s*(?:-|to|–)\\s*(\\d{1,3}(?:\\.\\d+)?)\\s*(?:lpa|lac|lacs|lakhs?)");
+    private static final Pattern SALARY_RANGE = Pattern.compile("(\\d{1,3}(?:\\.\\d+)?)\\s*(?:-|to)\\s*(\\d{1,3}(?:\\.\\d+)?)\\s*(?:lpa|lac|lacs|lakhs?)");
 
     public MatchDecision evaluate(AutomationJobFilter filter, String company, String title, String cardText) {
         String text = normalize(company + " " + title + " " + cardText);
@@ -70,7 +70,10 @@ public class NaukriResultFilterMatcher {
         if (locations.isEmpty()) {
             return true;
         }
-        return locations.stream().map(this::normalize).anyMatch(text::contains);
+        return locations.stream()
+                .flatMap(location -> locationAliases(location).stream())
+                .map(this::normalize)
+                .anyMatch(text::contains);
     }
 
     private boolean experienceMatches(String configuredExperience, String text) {
@@ -125,6 +128,11 @@ public class NaukriResultFilterMatcher {
         if (workMode.isBlank()) {
             return true;
         }
+        boolean cardHasWorkMode = containsAny(text, "remote", "work from home", "wfh", "hybrid",
+                "office", "onsite", "on site", "work from office");
+        if (!cardHasWorkMode) {
+            return true;
+        }
         if (containsAny(workMode, "remote", "work home", "wfh")) {
             return containsAny(text, "remote", "work from home", "wfh");
         }
@@ -135,6 +143,17 @@ public class NaukriResultFilterMatcher {
             return containsAny(text, "office", "onsite", "on site", "work from office");
         }
         return true;
+    }
+
+    private List<String> locationAliases(String location) {
+        String normalized = normalize(location);
+        if (normalized.equals("bangalore") || normalized.equals("bengaluru")) {
+            return List.of("bangalore", "bengaluru");
+        }
+        if (normalized.equals("gurgaon") || normalized.equals("gurugram")) {
+            return List.of("gurgaon", "gurugram");
+        }
+        return List.of(location);
     }
 
     private boolean containsAny(String text, String... values) {

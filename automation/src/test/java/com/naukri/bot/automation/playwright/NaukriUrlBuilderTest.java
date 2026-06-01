@@ -29,6 +29,10 @@ class NaukriUrlBuilderTest {
 
         assertTrue(url.contains("k=java+spring+boot"));
         assertTrue(url.contains("l=Bengaluru"));
-        assertTrue(url.startsWith("https://www.naukri.com/jobs-in-india?"));
+        assertTrue(url.contains("experience=5"));
+        assertTrue(url.contains("ctcFilter=20"));
+        assertTrue(url.contains("jobAge=7"));
+        assertTrue(url.contains("wfhType=2"));
+        assertTrue(url.startsWith("https://www.naukri.com/java-spring-boot-jobs-in-bengaluru?"));
     }
 }

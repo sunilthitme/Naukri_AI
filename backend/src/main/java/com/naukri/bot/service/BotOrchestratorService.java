@@ -178,6 +178,7 @@ public class BotOrchestratorService {
             User automationUser = user;
             JobFilter filter = jobFilterRepository.findByUser(user)
                     .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST, "Job filters are not configured"));
+            botLogService.info(user, "Using saved filters: " + filterSummary(filter));
             AutomationRunResult result = automationClient.run(request(user, properties.bot().dryRun(), manualLoginOnCaptcha),
                     question -> answerForQuestion(automationUser, question),
                     new Control(user.getId()),
@@ -246,10 +247,24 @@ public class BotOrchestratorService {
                 properties.bot().maxRetries());
     }
 
+    private String filterSummary(JobFilter filter) {
+        return "keywords=" + defaultText(filter.getKeywords(), "N/A")
+                + ", experience=" + defaultText(filter.getExperience(), "N/A")
+                + ", location=" + defaultText(filter.getLocation(), "N/A")
+                + ", salary=" + defaultText(filter.getSalary(), "N/A")
+                + ", workMode=" + defaultText(filter.getWorkMode(), "N/A")
+                + ", freshness=" + defaultText(filter.getFreshness(), "N/A")
+                + ", preferredCompanies=" + defaultText(filter.getPreferredCompanies(), "N/A")
+                + ", blacklistedCompanies=" + defaultText(filter.getBlacklistedCompanies(), "N/A")
+                + ", easyApplyOnly=" + filter.isEasyApplyOnly()
+                + ", dailyLimit=" + filter.getDailyApplyLimit();
+    }
+
     private Optional<String> answerForQuestion(User user, String question) {
         Optional<String> savedAnswer = aiAnswerService.answerFor(user, question);
         if (savedAnswer.isPresent()) {
-            botLogService.info(user, "Auto-answered application question: " + question);
+            botStatusService.activity(user, "Auto-answering repeated application question: " + question);
+            botLogService.info(user, "Auto-answered repeated application question: " + question);
             return savedAnswer;
         }
         String message = "Waiting for your answer to application question: " + question;

@@ -35,7 +35,7 @@ public class NaukriJobPage {
             + "button:has-text('Continue'), button:has-text('Next'), button:has-text('Proceed'), "
             + "button:has-text('Submit application'), button:has-text('Save and continue')";
     private static final String QUESTION_FIELD_SELECTORS = "textarea, input[type='text'], input[type='number'], "
-            + "input[type='tel'], input:not([type]), [contenteditable='true'], select";
+            + "input[type='tel'], input:not([type]), [contenteditable], [role='textbox'], select";
     private static final String CHOICE_CONTROL_SELECTORS = "input[type='radio'], input[type='checkbox'], "
             + "[role='radio'], [role='checkbox'], label, "
             + "[class*='radio'], [class*='Radio'], [class*='checkbox'], [class*='Checkbox'], "
@@ -195,13 +195,17 @@ public class NaukriJobPage {
             if (!processed.add(normalizeForProcessing(question))) {
                 continue;
             }
-            activity("Answering application question: " + question);
-            String answer = answerProvider.answerFor(question).orElse(null);
+            String answer = answerForQuestion(answerProvider, question);
             if (answer == null || answer.isBlank()) {
                 activity("No saved answer found for question: " + question);
                 return AnswerOutcome.NEEDS_USER_INPUT;
             }
+            activity("Found saved answer for question: " + question);
             fillField(field, answer);
+            if (!hasAnswerValue(field)) {
+                forceFillField(field, answer);
+            }
+            activity("Filled saved answer for question: " + question);
         }
         return AnswerOutcome.COMPLETE;
     }
@@ -212,7 +216,7 @@ public class NaukriJobPage {
             container = page.locator("body");
         }
         Locator choices = container.locator(CHOICE_CONTROL_SELECTORS);
-        int count = Math.min(choices.count(), 16);
+        int count = Math.min(choices.count(), 32);
         Set<String> processed = new HashSet<>();
         for (int i = 0; i < count; i++) {
             Locator choice = choices.nth(i);
@@ -237,8 +241,7 @@ public class NaukriJobPage {
             if (!processed.add(normalizeForProcessing(question))) {
                 continue;
             }
-            activity("Answering application choice question: " + question);
-            String answer = answerProvider.answerFor(question).orElse(null);
+            String answer = answerForQuestion(answerProvider, question);
             if (answer == null || answer.isBlank()) {
                 activity("No saved answer found for question: " + question);
                 return AnswerOutcome.NEEDS_USER_INPUT;
@@ -364,7 +367,7 @@ public class NaukriJobPage {
     private boolean hasQuestionFields() {
         try {
             return firstApplicationContainerWith(QUESTION_FIELD_SELECTORS) != null
-                    || firstApplicationContainerWith("input[type='radio'], input[type='checkbox']") != null;
+                    || firstApplicationContainerWith(CHOICE_CONTROL_SELECTORS) != null;
         } catch (Exception exception) {
             return false;
         }
@@ -529,9 +532,33 @@ public class NaukriJobPage {
         }
     }
 
+    private void forceFillField(Locator field, String answer) {
+        try {
+            field.evaluate("""
+                    (el, value) => {
+                      const tag = el.tagName.toLowerCase();
+                      el.scrollIntoView({ block: 'center', inline: 'nearest' });
+                      if (tag === 'select') {
+                        const option = Array.from(el.options).find(candidate =>
+                          candidate.value === value || candidate.textContent.trim().toLowerCase() === String(value).trim().toLowerCase());
+                        if (option) el.value = option.value;
+                      } else if (el.isContentEditable) {
+                        el.textContent = value;
+                      } else {
+                        el.value = value;
+                      }
+                      el.dispatchEvent(new Event('input', { bubbles: true }));
+                      el.dispatchEvent(new Event('change', { bubbles: true }));
+                      el.dispatchEvent(new Event('blur', { bubbles: true }));
+                    }
+                    """, answer);
+        } catch (Exception ignored) {
+        }
+    }
+
     private boolean clickMatchingChoice(Locator group, String answer) {
         Locator choices = group.locator(CHOICE_CONTROL_SELECTORS);
-        int count = Math.min(choices.count(), 16);
+        int count = Math.min(choices.count(), 32);
         for (int i = 0; i < count; i++) {
             Locator choice = choices.nth(i);
             if (!isChoiceOptionCandidate(choice) || !enabled(choice) || isAlreadySelected(choice)) {
@@ -827,8 +854,38 @@ public class NaukriJobPage {
     private String cleanQuestion(String value) {
         return compact(value)
                 .replaceAll("(?i)\\b(submit|continue|next|save and continue|save|done|ok|proceed)\\b", "")
+                .replaceAll("(?i)\\b(yes\\s+no|no\\s+yes|yesno|noyes)\\b", "")
                 .replaceAll("\\s+", " ")
                 .trim();
+    }
+
+    private String answerForQuestion(QuestionAnswerProvider answerProvider, String question) {
+        for (String candidate : questionVariants(question)) {
+            String answer = answerProvider.answerFor(candidate).orElse(null);
+            if (answer != null && !answer.isBlank()) {
+                if (!candidate.equals(question)) {
+                    activity("Matched saved answer using simplified question: " + candidate);
+                }
+                return answer;
+            }
+        }
+        return null;
+    }
+
+    private java.util.List<String> questionVariants(String question) {
+        String compactQuestion = compact(question);
+        String withoutOptions = cleanQuestion(compactQuestion)
+                .replaceAll("(?i)\\b(yes|no|true|false)\\b", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+        String beforeQuestionMark = compactQuestion.contains("?")
+                ? compactQuestion.substring(0, compactQuestion.indexOf('?') + 1).trim()
+                : compactQuestion;
+        java.util.LinkedHashSet<String> variants = new java.util.LinkedHashSet<>();
+        variants.add(compactQuestion);
+        variants.add(withoutOptions);
+        variants.add(beforeQuestionMark);
+        return variants.stream().filter(value -> value != null && !value.isBlank()).toList();
     }
 
     private String normalizeForProcessing(String value) {

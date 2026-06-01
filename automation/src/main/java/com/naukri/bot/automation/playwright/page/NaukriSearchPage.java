@@ -16,6 +16,8 @@ import java.util.Locale;
 
 public class NaukriSearchPage {
     private static final List<String> CURRENT_COMPANY_NAMES = List.of("tata consultancy services", "tcs");
+    private static final String JOB_CARD_SELECTORS = ".srp-jobtuple-wrapper, article[class*='jobTuple'], "
+            + ".jobTuple, [data-job-id], article";
 
     private final Page page;
     private final AutomationActivityListener activityListener;
@@ -36,10 +38,14 @@ public class NaukriSearchPage {
         String searchUrl = urlBuilder.searchUrl(filter);
         activity("Opening Naukri job search for: " + safe(filter.keywords()));
         activity("Applying saved filters: " + filterSummary(filter));
+        activity("Resolved Naukri search URL: " + searchUrl);
         page.navigate(searchUrl,
                 new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED));
         activity("Waiting for Naukri search results to load");
         page.waitForLoadState();
+        page.waitForTimeout(1_500);
+        applySearchBarFallback(filter);
+        activity("Naukri current search URL: " + page.url());
         List<DiscoveredJob> jobs = new ArrayList<>();
         int scrolls = 0;
         while (jobs.size() < limit && scrolls < 8) {
@@ -54,8 +60,8 @@ public class NaukriSearchPage {
     }
 
     private void collectVisibleJobs(AutomationJobFilter filter, List<DiscoveredJob> jobs, int limit) {
-        Locator cards = page.locator("article, .srp-jobtuple-wrapper, .jobTuple, [data-job-id]");
-        int count = Math.min(cards.count(), limit * 2);
+        Locator cards = page.locator(JOB_CARD_SELECTORS);
+        int count = Math.min(cards.count(), Math.max(limit * 8, 40));
         for (int i = 0; i < count && jobs.size() < limit; i++) {
             Locator card = cards.nth(i);
             String text = safeText(card);
@@ -67,7 +73,7 @@ public class NaukriSearchPage {
                 activity("Skipping current company: " + safe(company));
                 continue;
             }
-            String url = safeAttribute(card.locator("a[href]").first(), "href");
+            String url = safeAttribute(card.locator("a.title[href], a[href*='job-listings'], a[href*='jobs']").first(), "href");
             if (url == null || url.isBlank()) {
                 continue;
             }
@@ -78,9 +84,80 @@ public class NaukriSearchPage {
                 continue;
             }
             if (jobs.stream().noneMatch(job -> job.jobUrl().equals(url))) {
-                jobs.add(new DiscoveredJob(company, title, absolute(url), "N/A", "N/A", filter.location(), text));
+                String experience = firstText(card, ".expwdth, .experience, [class*='experience'], [class*='exp']");
+                String salary = firstText(card, ".sal-wrap, .salary, [class*='salary'], [class*='sal']");
+                String location = firstText(card, ".locWdth, .location, [class*='location'], [class*='loc']");
+                jobs.add(new DiscoveredJob(company, title, absolute(url), safe(experience), safe(salary),
+                        location.isBlank() ? filter.location() : location, text));
                 activity("Discovered job: " + safe(title) + " at " + safe(company));
             }
+        }
+    }
+
+    private void applySearchBarFallback(AutomationJobFilter filter) {
+        try {
+            boolean appliedKeyword = fillFirstVisible(
+                    "input[placeholder*='skills' i], input[placeholder*='designation' i], "
+                            + "input[placeholder*='keyword' i], input[id*='keyword' i], input[name*='keyword' i]",
+                    filter.keywords());
+            boolean appliedLocation = fillFirstVisible(
+                    "input[placeholder*='location' i], input[id*='location' i], input[name*='location' i]",
+                    filter.location());
+            if (!appliedKeyword && !appliedLocation) {
+                return;
+            }
+            Locator searchButton = firstVisible("button:has-text('Search'), [role='button']:has-text('Search'), .qsbSubmit");
+            if (searchButton == null) {
+                return;
+            }
+            activity("Confirmed filters in visible Naukri search bar; refreshing results");
+            searchButton.click();
+            page.waitForLoadState();
+            page.waitForTimeout(1_500);
+        } catch (Exception exception) {
+            activity("Search bar filter fallback skipped: " + exception.getMessage());
+        }
+    }
+
+    private boolean fillFirstVisible(String selector, String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        Locator locator = firstVisible(selector);
+        if (locator == null) {
+            return false;
+        }
+        String existing = safeInputValue(locator);
+        if (existing.toLowerCase(Locale.ROOT).contains(value.toLowerCase(Locale.ROOT))) {
+            return false;
+        }
+        locator.click();
+        locator.fill("");
+        locator.pressSequentially(value);
+        return true;
+    }
+
+    private Locator firstVisible(String selector) {
+        try {
+            Locator locator = page.locator(selector);
+            int count = Math.min(locator.count(), 12);
+            for (int i = 0; i < count; i++) {
+                Locator candidate = locator.nth(i);
+                if (candidate.isVisible() && candidate.isEnabled()) {
+                    return candidate;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private String safeInputValue(Locator locator) {
+        try {
+            Object value = locator.evaluate("el => el.value || el.getAttribute('value') || ''");
+            return value == null ? "" : value.toString();
+        } catch (Exception exception) {
+            return "";
         }
     }
 
@@ -117,6 +194,21 @@ public class NaukriSearchPage {
         } catch (Exception exception) {
             return null;
         }
+    }
+
+    private String firstText(Locator root, String selector) {
+        try {
+            Locator locator = root.locator(selector);
+            int count = Math.min(locator.count(), 8);
+            for (int i = 0; i < count; i++) {
+                String text = safeText(locator.nth(i));
+                if (!text.isBlank()) {
+                    return text;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return "";
     }
 
     private String absolute(String url) {
