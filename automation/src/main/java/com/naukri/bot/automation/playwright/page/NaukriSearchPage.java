@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Locale;
 
 public class NaukriSearchPage {
+    private static final List<String> CURRENT_COMPANY_NAMES = List.of("tata consultancy services", "tcs");
+
     private final Page page;
     private final AutomationActivityListener activityListener;
     private final HumanBehavior human = new HumanBehavior();
@@ -57,12 +59,16 @@ public class NaukriSearchPage {
             if (text.isBlank() || blacklisted(text, filter)) {
                 continue;
             }
+            String company = safeText(card.locator(".comp-name, .companyName, .subTitle").first());
+            if (currentCompany(company) || (company.isBlank() && currentCompany(text))) {
+                activity("Skipping current company: " + safe(company));
+                continue;
+            }
             String url = safeAttribute(card.locator("a[href]").first(), "href");
             if (url == null || url.isBlank()) {
                 continue;
             }
             String title = safeText(card.locator("a.title, .title, a[href*='job-listings']").first());
-            String company = safeText(card.locator(".comp-name, .companyName, .subTitle").first());
             if (jobs.stream().noneMatch(job -> job.jobUrl().equals(url))) {
                 jobs.add(new DiscoveredJob(company, title, absolute(url), "N/A", "N/A", filter.location(), text));
                 activity("Discovered job: " + safe(title) + " at " + safe(company));
@@ -79,6 +85,19 @@ public class NaukriSearchPage {
                 .filter(company -> company != null && !company.isBlank())
                 .map(company -> company.toLowerCase(Locale.ROOT))
                 .anyMatch(normalized::contains);
+    }
+
+    private boolean currentCompany(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        String normalized = text.toLowerCase(Locale.ROOT);
+        return CURRENT_COMPANY_NAMES.stream().anyMatch(company -> {
+            if ("tcs".equals(company)) {
+                return normalized.matches(".*\\btcs\\b.*");
+            }
+            return normalized.contains(company);
+        });
     }
 
     private String safeText(Locator locator) {

@@ -11,6 +11,7 @@ import com.naukri.bot.automation.playwright.HumanBehavior;
 import java.util.List;
 
 public class NaukriLoginPage {
+    private static final String PROFILE_URL = "https://www.naukri.com/mnjuser/profile";
     private static final List<String> LOGIN_URLS = List.of(
             "https://www.naukri.com/nlogin/login",
             "https://www.naukri.com/mnj/login",
@@ -76,6 +77,18 @@ public class NaukriLoginPage {
     public NaukriLoginPage(Page page, AutomationActivityListener activityListener) {
         this.page = page;
         this.activityListener = activityListener;
+    }
+
+    public LoginTestResult ensureLoggedIn(String email, String password) {
+        LoginTestResult existingSession = checkExistingSession();
+        if (existingSession.success()) {
+            return existingSession;
+        }
+        if (existingSession.status() == LoginStatus.CAPTCHA_DETECTED || existingSession.status() == LoginStatus.OTP_REQUIRED) {
+            return existingSession;
+        }
+        activity("Existing Naukri session needs login. Continuing with saved credentials.");
+        return login(email, password);
     }
 
     public LoginTestResult login(String email, String password) {
@@ -151,6 +164,57 @@ public class NaukriLoginPage {
 
     private LoginTestResult classifyCurrentPage() {
         return classifier.classify(page.url(), bodyText(), passwordFieldVisible());
+    }
+
+    private LoginTestResult checkExistingSession() {
+        activity("Checking existing Naukri browser session");
+        try {
+            String currentUrl = page.url();
+            if (currentUrl != null && currentUrl.startsWith("http") && currentUrl.contains("naukri.com")) {
+                activity("Refreshing existing Naukri page to verify session");
+                page.reload(new Page.ReloadOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED).setTimeout(45_000));
+            } else {
+                activity("Opening Naukri profile to verify session");
+                page.navigate(PROFILE_URL,
+                        new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED).setTimeout(45_000));
+            }
+            waitQuietly(1_000);
+        } catch (Exception refreshFailure) {
+            try {
+                activity("Refreshing failed. Opening Naukri profile to verify session");
+                page.navigate(PROFILE_URL,
+                        new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED).setTimeout(45_000));
+                waitQuietly(1_000);
+            } catch (Exception ignored) {
+            }
+        }
+
+        LoginTestResult currentState = classifyCurrentPage();
+        if (currentState.status() == LoginStatus.CAPTCHA_DETECTED || currentState.status() == LoginStatus.OTP_REQUIRED) {
+            return currentState;
+        }
+        if (loggedIn(bodyText())) {
+            activity("Existing Naukri session is active. Reusing browser.");
+            return LoginTestResult.success(page.url());
+        }
+
+        try {
+            activity("Opening Naukri profile to confirm login requirement");
+            page.navigate(PROFILE_URL,
+                    new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED).setTimeout(45_000));
+            waitQuietly(1_000);
+        } catch (Exception ignored) {
+        }
+        currentState = classifyCurrentPage();
+        if (currentState.status() == LoginStatus.CAPTCHA_DETECTED || currentState.status() == LoginStatus.OTP_REQUIRED) {
+            return currentState;
+        }
+        if (loggedIn(bodyText())) {
+            activity("Existing Naukri session is active. Reusing browser.");
+            return LoginTestResult.success(page.url());
+        }
+        return new LoginTestResult(false, LoginStatus.STILL_ON_LOGIN_PAGE,
+                "Existing Naukri browser session is not logged in.", page.url(), null);
     }
 
     private LoginForm openLoginForm() {
@@ -237,6 +301,16 @@ public class NaukriLoginPage {
         } catch (Exception exception) {
             return "";
         }
+    }
+
+    private boolean loggedIn(String bodyText) {
+        String body = bodyText == null ? "" : bodyText.toLowerCase();
+        return body.contains("my naukri")
+                || body.contains("view profile")
+                || body.contains("update profile")
+                || body.contains("profile performance")
+                || body.contains("naukri profile")
+                || body.contains("logout");
     }
 
     private boolean passwordFieldVisible() {

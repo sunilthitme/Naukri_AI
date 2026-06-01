@@ -28,37 +28,34 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 
 public class PlaywrightNaukriAutomationClient implements NaukriAutomationClient {
     private static final Logger log = LoggerFactory.getLogger(PlaywrightNaukriAutomationClient.class);
+    private final Object sessionLock = new Object();
+    private BrowserSession browserSession;
 
     @Override
     public AutomationRunResult run(AutomationRunRequest request,
                                    QuestionAnswerProvider questionAnswerProvider,
                                    AutomationControl control,
                                    AutomationActivityListener activityListener) {
+        synchronized (sessionLock) {
+            return runWithSession(request, questionAnswerProvider, control, activityListener);
+        }
+    }
+
+    private AutomationRunResult runWithSession(AutomationRunRequest request,
+                                               QuestionAnswerProvider questionAnswerProvider,
+                                               AutomationControl control,
+                                               AutomationActivityListener activityListener) {
         AutomationRunResult result = new AutomationRunResult();
-        try (Playwright playwright = Playwright.create()) {
-            activity(activityListener, "Starting Playwright browser");
-            BrowserType.LaunchOptions launchOptions = new BrowserType.LaunchOptions().setHeadless(request.headless());
-            if (request.proxy() != null && request.proxy().enabled()) {
-                activity(activityListener, "Configuring browser proxy");
-                Proxy proxy = new Proxy(request.proxy().server());
-                if (request.proxy().username() != null && !request.proxy().username().isBlank()) {
-                    proxy.setUsername(request.proxy().username());
-                    proxy.setPassword(request.proxy().password());
-                }
-                launchOptions.setProxy(proxy);
-            }
-
-            Browser browser = playwright.chromium().launch(launchOptions);
-            BrowserContext context = browser.newContext(new Browser.NewContextOptions()
-                    .setViewportSize(1366, 768)
-                    .setIgnoreHTTPSErrors(true));
-            Page page = context.newPage();
-
+        try {
+            BrowserSession session = browserSession(request, activityListener);
+            BrowserContext context = session.context;
+            Page page = session.mainPage();
             NaukriLoginPage loginPage = new NaukriLoginPage(page, activityListener);
-            LoginTestResult loginResult = loginPage.login(request.naukriEmail(), request.naukriPassword());
+            LoginTestResult loginResult = loginPage.ensureLoggedIn(request.naukriEmail(), request.naukriPassword());
             if (!loginResult.success()
                     && request.manualLoginOnCaptcha()
                     && manualLoginAllowed(loginResult.status())) {
@@ -75,16 +72,12 @@ public class PlaywrightNaukriAutomationClient implements NaukriAutomationClient 
                     result.setCaptchaDetected(true);
                 }
                 result.finish();
-                context.close();
-                browser.close();
                 return result;
             }
             if (loginPage.captchaDetected()) {
                 result.setCaptchaDetected(true);
                 result.getMessages().add("Captcha detected during login. Automation paused for manual action.");
                 result.finish();
-                context.close();
-                browser.close();
                 return result;
             }
 
@@ -97,6 +90,11 @@ public class PlaywrightNaukriAutomationClient implements NaukriAutomationClient 
                 if (control.shouldStop() || processed >= request.filter().dailyApplyLimit()) {
                     activity(activityListener, "Stop requested or daily apply limit reached");
                     break;
+                }
+                if (currentCompany(job.companyName())) {
+                    activity(activityListener, "Skipping current company: " + safe(job.companyName()));
+                    processed++;
+                    continue;
                 }
                 activity(activityListener, "Preparing job " + (processed + 1) + " of " + jobs.size() + ": " + job.jobTitle());
                 control.waitIfPaused();
@@ -112,8 +110,7 @@ public class PlaywrightNaukriAutomationClient implements NaukriAutomationClient 
                 processed++;
             }
 
-            context.close();
-            browser.close();
+            activity(activityListener, "Keeping Naukri browser open for the next run");
         } catch (Exception exception) {
             activity(activityListener, "Automation failed: " + exception.getMessage());
             log.error("Automation failed", exception);
@@ -127,15 +124,17 @@ public class PlaywrightNaukriAutomationClient implements NaukriAutomationClient 
 
     @Override
     public LoginTestResult testLogin(AutomationRunRequest request, AutomationActivityListener activityListener) {
-        try (Playwright playwright = Playwright.create()) {
-            activity(activityListener, "Starting Playwright browser for login test");
-            Browser browser = playwright.chromium().launch(launchOptions(request));
-            BrowserContext context = browser.newContext(new Browser.NewContextOptions()
-                    .setViewportSize(1366, 768)
-                    .setIgnoreHTTPSErrors(true));
-            Page page = context.newPage();
+        synchronized (sessionLock) {
+            return testLoginWithSession(request, activityListener);
+        }
+    }
+
+    private LoginTestResult testLoginWithSession(AutomationRunRequest request, AutomationActivityListener activityListener) {
+        try {
+            BrowserSession session = browserSession(request, activityListener);
+            Page page = session.mainPage();
             NaukriLoginPage loginPage = new NaukriLoginPage(page, activityListener);
-            LoginTestResult result = loginPage.login(request.naukriEmail(), request.naukriPassword());
+            LoginTestResult result = loginPage.ensureLoggedIn(request.naukriEmail(), request.naukriPassword());
             if (!result.success() && request.manualLoginOnCaptcha() && manualLoginAllowed(result.status())) {
                 activity(activityListener, "Switching to manual login recovery mode");
                 result = loginPage.waitForManualLogin(request.manualLoginTimeoutSeconds());
@@ -144,8 +143,7 @@ public class PlaywrightNaukriAutomationClient implements NaukriAutomationClient 
                 result = result.withScreenshot(screenshot(page, request.storageDirectory(), "naukri_login_test", 1));
             }
             activity(activityListener, result.success() ? "Naukri login test succeeded" : result.message());
-            context.close();
-            browser.close();
+            activity(activityListener, "Keeping Naukri browser open for the next run");
             return result;
         } catch (Exception exception) {
             activity(activityListener, "Naukri login test failed: " + exception.getMessage());
@@ -153,6 +151,36 @@ public class PlaywrightNaukriAutomationClient implements NaukriAutomationClient 
             return new LoginTestResult(false, LoginStatus.FAILED,
                     "Naukri login test failed: " + exception.getMessage(), null, null);
         }
+    }
+
+    private BrowserSession browserSession(AutomationRunRequest request, AutomationActivityListener activityListener) {
+        String proxySignature = proxySignature(request);
+        boolean needsVisibleManualLogin = request.manualLoginOnCaptcha();
+        if (browserSession != null && browserSession.usable() && browserSession.proxySignature.equals(proxySignature)) {
+            if (needsVisibleManualLogin && browserSession.headless) {
+                activity(activityListener, "Existing browser is headless. Reopening visible browser for manual login.");
+                browserSession.close();
+                browserSession = null;
+            } else {
+                activity(activityListener, "Reusing existing Naukri browser session");
+                return browserSession;
+            }
+        }
+        if (browserSession != null) {
+            activity(activityListener, "Browser settings changed. Reopening Naukri browser session.");
+            browserSession.close();
+            browserSession = null;
+        }
+
+        activity(activityListener, "Starting Playwright browser");
+        Playwright playwright = Playwright.create();
+        Browser browser = playwright.chromium().launch(launchOptions(request));
+        BrowserContext context = browser.newContext(new Browser.NewContextOptions()
+                .setViewportSize(1366, 768)
+                .setIgnoreHTTPSErrors(true));
+        Page page = context.newPage();
+        browserSession = new BrowserSession(playwright, browser, context, page, request.headless(), proxySignature);
+        return browserSession;
     }
 
     private BrowserType.LaunchOptions launchOptions(AutomationRunRequest request) {
@@ -166,6 +194,20 @@ public class PlaywrightNaukriAutomationClient implements NaukriAutomationClient 
             launchOptions.setProxy(proxy);
         }
         return launchOptions;
+    }
+
+    private String proxySignature(AutomationRunRequest request) {
+        if (request.proxy() == null || !request.proxy().enabled()) {
+            return "no-proxy";
+        }
+        return String.join("|",
+                safe(request.proxy().server()),
+                safe(request.proxy().username()),
+                safe(request.proxy().password()));
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
     }
 
     private JobApplicationResult applyWithRetry(BrowserContext context,
@@ -233,5 +275,66 @@ public class PlaywrightNaukriAutomationClient implements NaukriAutomationClient 
                 || status == LoginStatus.OTP_REQUIRED
                 || status == LoginStatus.LOGIN_FORM_NOT_FOUND
                 || status == LoginStatus.STILL_ON_LOGIN_PAGE;
+    }
+
+    private boolean currentCompany(String companyName) {
+        if (companyName == null || companyName.isBlank()) {
+            return false;
+        }
+        String normalized = companyName.toLowerCase(Locale.ROOT);
+        return normalized.contains("tata consultancy services") || normalized.matches(".*\\btcs\\b.*");
+    }
+
+    private static final class BrowserSession {
+        private final Playwright playwright;
+        private final Browser browser;
+        private final BrowserContext context;
+        private final boolean headless;
+        private final String proxySignature;
+        private Page page;
+
+        private BrowserSession(Playwright playwright,
+                               Browser browser,
+                               BrowserContext context,
+                               Page page,
+                               boolean headless,
+                               String proxySignature) {
+            this.playwright = playwright;
+            this.browser = browser;
+            this.context = context;
+            this.page = page;
+            this.headless = headless;
+            this.proxySignature = proxySignature;
+        }
+
+        private Page mainPage() {
+            if (page == null || page.isClosed()) {
+                page = context.newPage();
+            }
+            return page;
+        }
+
+        private boolean usable() {
+            try {
+                return context != null && browser != null && browser.isConnected();
+            } catch (Exception exception) {
+                return false;
+            }
+        }
+
+        private void close() {
+            try {
+                context.close();
+            } catch (Exception ignored) {
+            }
+            try {
+                browser.close();
+            } catch (Exception ignored) {
+            }
+            try {
+                playwright.close();
+            } catch (Exception ignored) {
+            }
+        }
     }
 }
