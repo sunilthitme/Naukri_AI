@@ -218,6 +218,7 @@ public class NaukriJobPage {
         Locator choices = container.locator(CHOICE_CONTROL_SELECTORS);
         int count = Math.min(choices.count(), 32);
         Set<String> processed = new HashSet<>();
+        boolean answeredAny = false;
         for (int i = 0; i < count; i++) {
             Locator choice = choices.nth(i);
             if (!isChoiceOptionCandidate(choice) || !enabled(choice) || isAlreadySelected(choice)) {
@@ -250,7 +251,10 @@ public class NaukriJobPage {
                 activity("No visible answer option matched '" + compact(answer) + "' for question: " + question);
                 return AnswerOutcome.NEEDS_USER_INPUT;
             }
-            return AnswerOutcome.COMPLETE;
+            answeredAny = true;
+        }
+        if (answeredAny) {
+            activity("Answered all visible choice questions in this application step");
         }
         return AnswerOutcome.COMPLETE;
     }
@@ -472,16 +476,9 @@ public class NaukriJobPage {
 
     private Locator nearestQuestionGroup(Locator control) {
         try {
-            Locator drawer = control.locator(
-                    "xpath=ancestor::*[contains(@class,'drawer') or contains(@class,'Drawer') "
-                            + "or contains(@class,'ssrc__drawer') or contains(@id,'ssrc') "
-                            + "or contains(@class,'chatbot') or contains(@class,'Chatbot') "
-                            + "or contains(@class,'chatBot') or @role='dialog']"
-                            + "[count(.//input[@type='radio' or @type='checkbox']) + count(.//button) "
-                            + "+ count(.//*[@role='button' or @role='radio' or @role='checkbox']) "
-                            + "+ count(.//*[contains(@class,'radio') or contains(@class,'Radio') or contains(@class,'checkbox') or contains(@class,'Checkbox') or contains(@class,'option') or contains(@class,'Option')]) > 1][1]");
-            if (drawer.count() > 0) {
-                return drawer.first();
+            Locator preferred = control.locator("xpath=ancestor::*[self::fieldset or self::form or self::section or self::article or self::aside or self::li or self::div][contains(@class,'question') or contains(@class,'Question') or contains(@class,'ques') or contains(@class,'Ques')][1]");
+            if (preferred.count() > 0) {
+                return preferred.first();
             }
         } catch (Exception ignored) {
         }
@@ -498,9 +495,16 @@ public class NaukriJobPage {
         } catch (Exception ignored) {
         }
         try {
-            Locator preferred = control.locator("xpath=ancestor::*[self::fieldset or self::form or self::section or self::article or self::aside or self::li or self::div][contains(@class,'question') or contains(@class,'Question') or contains(@class,'ques') or contains(@class,'Ques')][1]");
-            if (preferred.count() > 0) {
-                return preferred.first();
+            Locator drawer = control.locator(
+                    "xpath=ancestor::*[contains(@class,'drawer') or contains(@class,'Drawer') "
+                            + "or contains(@class,'ssrc__drawer') or contains(@id,'ssrc') "
+                            + "or contains(@class,'chatbot') or contains(@class,'Chatbot') "
+                            + "or contains(@class,'chatBot') or @role='dialog']"
+                            + "[count(.//input[@type='radio' or @type='checkbox']) + count(.//button) "
+                            + "+ count(.//*[@role='button' or @role='radio' or @role='checkbox']) "
+                            + "+ count(.//*[contains(@class,'radio') or contains(@class,'Radio') or contains(@class,'checkbox') or contains(@class,'Checkbox') or contains(@class,'option') or contains(@class,'Option')]) > 1][1]");
+            if (drawer.count() > 0) {
+                return drawer.first();
             }
         } catch (Exception ignored) {
         }
@@ -855,6 +859,7 @@ public class NaukriJobPage {
         return compact(value)
                 .replaceAll("(?i)\\b(submit|continue|next|save and continue|save|done|ok|proceed)\\b", "")
                 .replaceAll("(?i)\\b(yes\\s+no|no\\s+yes|yesno|noyes)\\b", "")
+                .replaceAll("(?i)\\b(yes|no|true|false)\\b", "")
                 .replaceAll("\\s+", " ")
                 .trim();
     }
