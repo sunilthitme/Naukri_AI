@@ -26,6 +26,7 @@ class AIAnswerServiceTest {
     void savedAnswerIsReusedForSimilarFutureQuestion() {
         User user = new User();
         when(repository.findByUserAndNormalizedQuestion(eq(user), eq("notice period"))).thenReturn(Optional.empty());
+        when(repository.findByUserOrderByUpdatedAtDesc(user)).thenReturn(List.of());
         when(repository.save(any(QuestionAnswer.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         service.save(user, new QuestionAnswerRequest("Notice period?", "30 days"));
@@ -40,6 +41,21 @@ class AIAnswerServiceTest {
         assertTrue(answer.isPresent());
         assertEquals("30 days", answer.get());
         assertEquals(1, saved.getUsageCount());
-        assertTrue(saved.getConfidenceScore() >= 0.78);
+        assertTrue(saved.getConfidenceScore() >= 0.70);
+    }
+
+    @Test
+    void answerMatchingUsesOriginalQuestionForOlderSavedRows() {
+        User user = new User();
+        QuestionAnswer saved = new QuestionAnswer();
+        saved.setQuestion("Expected CTC?");
+        saved.setNormalizedQuestion("experienceected compensation");
+        saved.setAnswer("25 LPA");
+        when(repository.findByUserOrderByUpdatedAtDesc(user)).thenReturn(List.of(saved));
+
+        Optional<String> answer = service.answerFor(user, "What is your expected salary?");
+
+        assertTrue(answer.isPresent());
+        assertEquals("25 LPA", answer.get());
     }
 }

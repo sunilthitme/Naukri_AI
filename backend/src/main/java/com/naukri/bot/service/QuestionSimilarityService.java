@@ -7,9 +7,17 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class QuestionSimilarityService {
+    private static final Set<String> STOP_WORDS = Set.of(
+            "a", "an", "and", "any", "answer", "are", "can", "choose", "continue", "do", "does",
+            "enter", "for", "from", "have", "if", "in", "is", "it", "mention", "next", "no",
+            "of", "ok", "on", "option", "or", "please", "provide", "save", "select", "submit",
+            "the", "this", "to", "what", "which", "with", "would", "yes", "you", "your"
+    );
+
     public String normalize(String question) {
         if (question == null) {
             return "";
@@ -20,10 +28,24 @@ public class QuestionSimilarityService {
                 .replaceAll("[^a-z0-9 ]", " ")
                 .replaceAll("\\s+", " ")
                 .trim();
-        return normalized
-                .replace("ctc", "compensation")
-                .replace("yrs", "years")
-                .replace("exp", "experience");
+        normalized = normalized
+                .replaceAll("\\bctc\\b", " compensation ")
+                .replaceAll("\\bpackage\\b", " compensation ")
+                .replaceAll("\\bsalary\\b", " compensation ")
+                .replaceAll("\\blpa\\b", " compensation ")
+                .replaceAll("\\byrs\\b", " years ")
+                .replaceAll("\\byr\\b", " year ")
+                .replaceAll("\\bexp\\b", " experience ")
+                .replaceAll("\\bcurr\\b", " current ")
+                .replaceAll("\\bjoining\\b", " notice ")
+                .replaceAll("\\bjoin\\b", " notice ");
+        return Arrays.stream(normalized.replaceAll("\\s+", " ").trim().split(" "))
+                .filter(token -> !token.isBlank())
+                .filter(token -> !STOP_WORDS.contains(token))
+                .map(this::canonicalToken)
+                .collect(Collectors.joining(" "))
+                .replaceAll("\\s+", " ")
+                .trim();
     }
 
     public double confidence(String left, String right) {
@@ -35,12 +57,91 @@ public class QuestionSimilarityService {
         if (a.equals(b)) {
             return 1;
         }
-        if (a.contains(b) || b.contains(a)) {
-            return 0.9;
+        String leftCategory = category(a);
+        String rightCategory = category(b);
+        if (!leftCategory.isBlank() && leftCategory.equals(rightCategory)) {
+            return 0.96;
         }
-        double tokenScore = jaccard(tokens(a), tokens(b));
+        if (!leftCategory.isBlank() && !rightCategory.isBlank()) {
+            return 0.35;
+        }
+        if (a.contains(b) || b.contains(a)) {
+            return 0.92;
+        }
+        Set<String> leftTokens = tokens(a);
+        Set<String> rightTokens = tokens(b);
+        double tokenScore = jaccard(leftTokens, rightTokens);
+        double coverageScore = coverage(leftTokens, rightTokens);
         double editScore = 1.0 - ((double) levenshtein(a, b) / Math.max(a.length(), b.length()));
-        return Math.max(0, Math.min(1, (tokenScore * 0.65) + (editScore * 0.35)));
+        return Math.max(0, Math.min(1, Math.max(coverageScore * 0.88, (tokenScore * 0.60) + (editScore * 0.40))));
+    }
+
+    private String category(String normalizedQuestion) {
+        String text = normalizedQuestion == null ? "" : normalizedQuestion;
+        if (containsAll(text, "current", "compensation")) {
+            return "current_compensation";
+        }
+        if (containsAny(text, "expected", "expecting", "expectation") && text.contains("compensation")) {
+            return "expected_compensation";
+        }
+        if (containsAny(text, "notice", "available", "availability") && !text.contains("interview")) {
+            return "notice_period";
+        }
+        if (containsAny(text, "city", "location") && containsAny(text, "residing", "relocate", "relocation", "preferred")) {
+            return "location_choice";
+        }
+        if (containsAny(text, "relocate", "relocation")) {
+            return "relocation_yes_no";
+        }
+        if (containsAny(text, "authorization", "authorised", "authorized", "visa", "sponsor", "permit")) {
+            return "work_authorization";
+        }
+        if (text.contains("experience") && !text.contains("interview")) {
+            return "experience";
+        }
+        if (containsAny(text, "skill", "skills", "technology", "technologies")) {
+            return "skills";
+        }
+        if (containsAny(text, "interview", "interviews")) {
+            return "interview_availability";
+        }
+        if (containsAny(text, "qualification", "education", "degree")) {
+            return "education";
+        }
+        if (containsAny(text, "reason", "change", "switch")) {
+            return "job_change_reason";
+        }
+        return "";
+    }
+
+    private String canonicalToken(String token) {
+        if (Set.of("compensation", "compensations").contains(token)) {
+            return "compensation";
+        }
+        if (Set.of("expected", "expecting", "expectation").contains(token)) {
+            return "expected";
+        }
+        if (Set.of("relocate", "relocating", "relocation").contains(token)) {
+            return "relocate";
+        }
+        if (Set.of("authorized", "authorised", "authorization", "authorisation").contains(token)) {
+            return "authorization";
+        }
+        if (Set.of("skills", "skill").contains(token)) {
+            return "skill";
+        }
+        if (Set.of("interviews", "interview").contains(token)) {
+            return "interview";
+        }
+        return token;
+    }
+
+    private boolean containsAll(String text, String... values) {
+        return Arrays.stream(values).allMatch(text::contains);
+    }
+
+    private boolean containsAny(String text, String... values) {
+        return Arrays.stream(values).anyMatch(text::contains);
     }
 
     private Set<String> tokens(String text) {
@@ -53,6 +154,13 @@ public class QuestionSimilarityService {
         Set<String> union = new HashSet<>(a);
         union.addAll(b);
         return union.isEmpty() ? 0 : (double) intersection.size() / union.size();
+    }
+
+    private double coverage(Set<String> a, Set<String> b) {
+        Set<String> intersection = new HashSet<>(a);
+        intersection.retainAll(b);
+        int smaller = Math.min(a.size(), b.size());
+        return smaller == 0 ? 0 : (double) intersection.size() / smaller;
     }
 
     private int levenshtein(String left, String right) {

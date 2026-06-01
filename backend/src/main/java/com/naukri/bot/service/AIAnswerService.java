@@ -18,7 +18,8 @@ import java.util.Optional;
 @Service
 @RequiredArgsConstructor
 public class AIAnswerService {
-    private static final double AUTO_ANSWER_THRESHOLD = 0.78;
+    private static final double AUTO_ANSWER_THRESHOLD = 0.70;
+    private static final double MERGE_QUESTION_THRESHOLD = 0.88;
 
     private final QuestionAnswerRepository questionAnswerRepository;
     private final QuestionSimilarityService similarityService;
@@ -30,7 +31,11 @@ public class AIAnswerService {
     @Transactional
     public QuestionAnswerResponse save(User user, QuestionAnswerRequest request) {
         String normalized = similarityService.normalize(request.question());
-        QuestionAnswer answer = questionAnswerRepository.findByUserAndNormalizedQuestion(user, normalized).orElseGet(QuestionAnswer::new);
+        QuestionAnswer answer = questionAnswerRepository.findByUserAndNormalizedQuestion(user, normalized)
+                .orElseGet(() -> bestExisting(user, request.question())
+                        .filter(candidate -> candidate.confidence() >= MERGE_QUESTION_THRESHOLD)
+                        .map(ScoredQuestionAnswer::answer)
+                        .orElseGet(QuestionAnswer::new));
         answer.setUser(user);
         answer.setQuestion(request.question());
         answer.setNormalizedQuestion(normalized);
@@ -43,33 +48,47 @@ public class AIAnswerService {
 
     @Transactional
     public Optional<String> answerFor(User user, String question) {
-        AnswerMatchResponse match = match(user, question);
-        if (!match.matched()) {
+        Optional<ScoredQuestionAnswer> bestMatch = bestExisting(user, question)
+                .filter(candidate -> candidate.confidence() >= AUTO_ANSWER_THRESHOLD);
+        if (bestMatch.isEmpty()) {
             return Optional.empty();
         }
-        String normalized = similarityService.normalize(question);
-        questionAnswerRepository.findByUserOrderByUpdatedAtDesc(user).stream()
-                .max(Comparator.comparingDouble(existing -> similarityService.confidence(normalized, existing.getNormalizedQuestion())))
-                .ifPresent(existing -> {
-                    existing.setLastUsedAt(Instant.now());
-                    existing.setUsageCount(existing.getUsageCount() + 1);
-                    existing.setConfidenceScore(match.confidenceScore());
-                });
-        return Optional.of(match.answer());
+        QuestionAnswer answer = bestMatch.get().answer();
+        answer.setLastUsedAt(Instant.now());
+        answer.setUsageCount(answer.getUsageCount() + 1);
+        answer.setConfidenceScore(bestMatch.get().confidence());
+        return Optional.of(answer.getAnswer());
     }
 
     public AnswerMatchResponse match(User user, String question) {
-        String normalized = similarityService.normalize(question);
-        return questionAnswerRepository.findByUserOrderByUpdatedAtDesc(user).stream()
-                .map(existing -> new AnswerMatchResponse(true, existing.getAnswer(),
-                        similarityService.confidence(normalized, existing.getNormalizedQuestion())))
-                .max(Comparator.comparingDouble(AnswerMatchResponse::confidenceScore))
-                .filter(match -> match.confidenceScore() >= AUTO_ANSWER_THRESHOLD)
+        return bestExisting(user, question)
+                .filter(candidate -> candidate.confidence() >= AUTO_ANSWER_THRESHOLD)
+                .map(candidate -> new AnswerMatchResponse(true, candidate.answer().getAnswer(), candidate.confidence()))
                 .orElse(new AnswerMatchResponse(false, null, 0));
+    }
+
+    private Optional<ScoredQuestionAnswer> bestExisting(User user, String question) {
+        List<QuestionAnswer> answers = questionAnswerRepository.findByUserOrderByUpdatedAtDesc(user);
+        if (answers == null || answers.isEmpty()) {
+            return Optional.empty();
+        }
+        return answers.stream()
+                .map(existing -> new ScoredQuestionAnswer(existing, confidence(question, existing)))
+                .max(Comparator.comparingDouble(ScoredQuestionAnswer::confidence));
+    }
+
+    private double confidence(String question, QuestionAnswer existing) {
+        return Math.max(
+                similarityService.confidence(question, existing.getQuestion()),
+                similarityService.confidence(question, existing.getNormalizedQuestion())
+        );
     }
 
     private QuestionAnswerResponse toResponse(QuestionAnswer answer) {
         return new QuestionAnswerResponse(answer.getId(), answer.getQuestion(), answer.getAnswer(),
                 answer.getConfidenceScore(), answer.getUsageCount(), answer.getLastUsedAt(), answer.getUpdatedAt());
+    }
+
+    private record ScoredQuestionAnswer(QuestionAnswer answer, double confidence) {
     }
 }

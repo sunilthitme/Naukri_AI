@@ -7,6 +7,7 @@ import com.naukri.bot.automation.AutomationActivityListener;
 import com.naukri.bot.automation.model.AutomationJobFilter;
 import com.naukri.bot.automation.model.DiscoveredJob;
 import com.naukri.bot.automation.playwright.HumanBehavior;
+import com.naukri.bot.automation.playwright.NaukriResultFilterMatcher;
 import com.naukri.bot.automation.playwright.NaukriUrlBuilder;
 
 import java.util.ArrayList;
@@ -20,6 +21,7 @@ public class NaukriSearchPage {
     private final AutomationActivityListener activityListener;
     private final HumanBehavior human = new HumanBehavior();
     private final NaukriUrlBuilder urlBuilder = new NaukriUrlBuilder();
+    private final NaukriResultFilterMatcher filterMatcher = new NaukriResultFilterMatcher();
 
     public NaukriSearchPage(Page page) {
         this(page, AutomationActivityListener.NOOP);
@@ -33,6 +35,7 @@ public class NaukriSearchPage {
     public List<DiscoveredJob> search(AutomationJobFilter filter, int limit) {
         String searchUrl = urlBuilder.searchUrl(filter);
         activity("Opening Naukri job search for: " + safe(filter.keywords()));
+        activity("Applying saved filters: " + filterSummary(filter));
         page.navigate(searchUrl,
                 new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED));
         activity("Waiting for Naukri search results to load");
@@ -56,7 +59,7 @@ public class NaukriSearchPage {
         for (int i = 0; i < count && jobs.size() < limit; i++) {
             Locator card = cards.nth(i);
             String text = safeText(card);
-            if (text.isBlank() || blacklisted(text, filter)) {
+            if (text.isBlank()) {
                 continue;
             }
             String company = safeText(card.locator(".comp-name, .companyName, .subTitle").first());
@@ -69,22 +72,16 @@ public class NaukriSearchPage {
                 continue;
             }
             String title = safeText(card.locator("a.title, .title, a[href*='job-listings']").first());
+            NaukriResultFilterMatcher.MatchDecision decision = filterMatcher.evaluate(filter, company, title, text);
+            if (!decision.accepted()) {
+                activity("Skipping job because " + decision.reason() + ": " + safe(title) + " at " + safe(company));
+                continue;
+            }
             if (jobs.stream().noneMatch(job -> job.jobUrl().equals(url))) {
                 jobs.add(new DiscoveredJob(company, title, absolute(url), "N/A", "N/A", filter.location(), text));
                 activity("Discovered job: " + safe(title) + " at " + safe(company));
             }
         }
-    }
-
-    private boolean blacklisted(String text, AutomationJobFilter filter) {
-        if (filter.blacklistedCompanies() == null) {
-            return false;
-        }
-        String normalized = text.toLowerCase(Locale.ROOT);
-        return filter.blacklistedCompanies().stream()
-                .filter(company -> company != null && !company.isBlank())
-                .map(company -> company.toLowerCase(Locale.ROOT))
-                .anyMatch(normalized::contains);
     }
 
     private boolean currentCompany(String text) {
@@ -131,6 +128,17 @@ public class NaukriSearchPage {
 
     private String safe(String value) {
         return value == null || value.isBlank() ? "N/A" : value;
+    }
+
+    private String filterSummary(AutomationJobFilter filter) {
+        return "keywords=" + safe(filter.keywords())
+                + ", experience=" + safe(filter.experience())
+                + ", location=" + safe(filter.location())
+                + ", salary=" + safe(filter.salary())
+                + ", workMode=" + safe(filter.workMode())
+                + ", freshness=" + safe(filter.freshness())
+                + ", easyApplyOnly=" + filter.easyApplyOnly()
+                + ", dailyLimit=" + filter.dailyApplyLimit();
     }
 
     private void activity(String message) {
